@@ -1,16 +1,11 @@
-glab=# CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-ERROR:  extension "uuid-ossp" is not available
-HINT:  The extension must first be installed on the system where PostgreSQL is running.
-glab=# CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION
-glab=# CREATE TABLE tags (
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE TABLE tags (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     value TEXT NOT NULL,
     category SMALLINT NOT NULL DEFAULT 3,
     CONSTRAINT tags_value_cat_unique UNIQUE (value, category) -- Чтобы не дублировать теги
 );
-CREATE TABLE
-glab=# CREATE TABLE files (
+CREATE TABLE files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     path TEXT NOT NULL,       -- Путь на диске (например "a1/b2/uuid.jpg")
     hash TEXT,                -- SHA256 хэш файла
@@ -18,8 +13,7 @@ glab=# CREATE TABLE files (
     meta JSONB,               -- Ширина, высота, длительность - лучше в JSONB, гибче
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-CREATE TABLE
-glab=# CREATE TABLE posts (
+CREATE TABLE posts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     file_id UUID NOT NULL REFERENCES files(id), -- Связь с файлом
@@ -27,14 +21,12 @@ glab=# CREATE TABLE posts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-CREATE TABLE
-glab=# CREATE TABLE post_tags (
+CREATE TABLE post_tags (
     post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
     tag_id UUID REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (post_id, tag_id)
 );
-CREATE TABLE
-glab=# CREATE TABLE playlists (
+CREATE TABLE playlists (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     description TEXT,
@@ -43,14 +35,12 @@ glab=# CREATE TABLE playlists (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     -- owner_id UUID -- раскомментируешь, когда появятся юзеры
 );
-CREATE TABLE
-glab=# CREATE TABLE playlist_tags (
+CREATE TABLE playlist_tags (
     playlist_id UUID REFERENCES playlists(id) ON DELETE CASCADE,
     tag_id UUID REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (playlist_id, tag_id)
 );
-CREATE TABLE
-glab=# CREATE TABLE playlist_items (
+CREATE TABLE playlist_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
     position INTEGER NOT NULL, -- Порядковый номер (0, 1, 2...)
@@ -62,6 +52,17 @@ glab=# CREATE TABLE playlist_items (
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-CREATE TABLE
-glab=# CREATE INDEX idx_playlist_items_order ON playlist_items(playlist_id, position);
-CREATE INDEX
+CREATE INDEX idx_playlist_items_order ON playlist_items(playlist_id, position);
+
+-- Таблица юзеров
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL, -- Хэш пароля
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Добавляем владельца к плейлистам
+ALTER TABLE playlists ADD COLUMN owner_id UUID REFERENCES users(id) ON DELETE CASCADE;
+
+

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
-use crate::domain::model::{NewPost, NewTag, Playlist, PlaylistContent, PlaylistID, PlaylistItem, PlaylistQuery, PlaylistWithItems, Post, PostID, RepoError, Tag, TagID, TagQuery};
+use crate::domain::model::{NewPost, NewTag, Playlist, PlaylistContent, PlaylistID, PlaylistItem, PlaylistQuery, PlaylistSummary, PlaylistWithItems, Post, PostID, RepoError, Tag, TagID, TagQuery};
 use crate::domain::repository::{PlaylistRepository, PostRepository, TagRepository};
 
 #[derive(Clone)]
@@ -141,7 +141,7 @@ impl TagRepository for PostgresTagRepository {
                  ON CONFLICT (category, value) DO UPDATE SET value = EXCLUDED.value
                  RETURNING id, category, value",
                 Uuid::new_v4(),
-                new_tag.category as i32, // приведение enum к int
+                new_tag.category as i32,
                 new_tag.value
             )
             .fetch_one(&self.pool)
@@ -256,6 +256,48 @@ impl PlaylistRepository for PostgresPlaylistRepository {
         }).collect();
 
         Ok(PlaylistWithItems { playlist, items })
+    }
+
+    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<PlaylistSummary>, RepoError> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT
+                p.id, p.title, p.description, p.cover_file_id,
+                (SELECT COUNT(*)  FROM playlist_items pi  WHERE pi.playlist_id = p.id) as "item_count!",
+                COALESCE(
+                    json_agg(json_build_object('id', t.id, 'value', t.value, 'category', t.category))
+                    FILTER (WHERE t.id IS NOT NULL),
+                    '[]'
+                ) as "tags!"
+            FROM playlists p
+            LEFT JOIN playlist_tags pt ON p.id = pt.playlist_id
+            LEFT JOIN tags t ON pt.tag_id = t.id
+            WHERE p.owner_id = $1
+            GROUP BY p.id
+            "#,
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            println!("[DB] Error: {:?}", e);
+            RepoError::StorageError
+        })?;
+
+        let summaries = rows.into_iter().map(|r| {
+            let tags: Vec<Tag> = serde_json::from_value(r.tags).unwrap_or_default();
+            
+            PlaylistSummary {
+                id: r.id,
+                title: r.title,
+                description: r.description.unwrap_or_default(),
+                cover: r.cover_file_id,
+                item_count: r.item_count,
+                tags,
+            }
+        }).collect();
+
+        Ok(summaries)
     }
 
     async fn search(&self, query: PlaylistQuery) -> Result<Vec<Playlist>, RepoError> {

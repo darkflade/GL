@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use crate::domain::model::{File, FileID, NewPost, NewTag, Playlist, PlaylistID, PlaylistQuery, PlaylistWithItems, Post, PostID, RepoError, Tag, TagID, TagQuery};
+use uuid::Uuid;
+use crate::domain::model::{File, FileID, NewPost, NewTag, Playlist, PlaylistID, PlaylistQuery, PlaylistSummary, PlaylistWithItems, Post, PostID, RepoError, Tag, TagID, TagQuery};
 
 #[async_trait]
 pub trait FileRepository: Send + Sync {
@@ -18,6 +19,8 @@ pub trait PlaylistRepository: Send + Sync {
     async fn get(&self, id: PlaylistID) -> Result<Playlist, RepoError>;
 
     async fn get_with_items(&self, id: PlaylistID) -> Result<PlaylistWithItems, RepoError>;
+
+    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<PlaylistSummary>, RepoError>;
     async fn search(&self, query: PlaylistQuery) -> Result<Vec<Playlist>, RepoError>;
 }
 

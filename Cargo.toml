@@ -9,4 +9,7 @@ tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "macros"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", "macros", "uuid"] }
 uuid = { version = "1.19.0", features = ["serde", "v4", "fast-rng"] }
 actix-web = "4.12.1"
+actix-multipart = "0.7.2"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.148"
+dotenv = "0.15.0"

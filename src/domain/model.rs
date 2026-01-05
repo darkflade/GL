@@ -106,6 +106,16 @@ pub enum PlaylistContent {
     Note(String)
 }
 
+#[derive(Serialize)]
+pub struct PlaylistSummary {
+    pub id: PlaylistID,
+    pub title: String,
+    pub description: String,
+    pub cover: Option<FileID>,
+    pub item_count: i64,
+    pub tags: Vec<Tag>,
+}
+
 // Classes for request
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NewTag {

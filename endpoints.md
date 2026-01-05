@@ -4,21 +4,39 @@
 ___
 ### [Get]
 - playlists (in cookie user determined)
-- playlistContent/:id
+- playlists/{id}
 ### [Post]
-- playlist/:id/update
+- playlists
+- playlists/{id}/item
+### [Patch]
+- playlists/{id}
 ### [Delete]
-- playlist/:id
+- playlist/{id}
 
 ## Posts
 ___
 ### [Get]
-- posts
-- post/:id
-- content/:id
+- posts (tags in query)
+- posts/{id}
 
 ### [Post]
-- post/add
+- posts
 
 ### [Delete]
-- post/:id/delete
+- posts/{id}
+
+
+
+    GET /playlists — Список плейлистов юзера (Краткие карточки PlaylistSummary).
+    GET /playlists/{id} — Полный плейлист (PlaylistWithItems).
+    POST /playlists — Создать новый плейлист.
+    PATCH /playlists/{id} — Обновить метаданные (название, обложка).
+    DELETE /playlists/{id} — Удалить плейлист.
+    POST /playlists/{id}/items — Добавить элемент в плейлист.
+
+    GET /posts — Поиск постов (с Query Params: ?tags=...&page=1).
+    GET /posts/{id} — Получить пост (метаданные).
+    POST /posts — Создать пост (Загрузка файла + JSON).
+    DELETE /posts/{id} — Удалить.
+  
+    GET /files/{id}
