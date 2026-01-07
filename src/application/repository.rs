@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use uuid::Uuid;
 use crate::domain::files::FileStorage;
 use crate::domain::model::{File, FileID, NewPost, NewTag, Playlist, PlaylistID, PlaylistQuery, Post, PostID, RepoError, Tag, TagQuery};
@@ -9,20 +10,20 @@ pub struct CreatePostUseCase<
     FS: FileStorage,
     TR: TagRepository,
 > {
-    posts: PR,
-    files: FS,
-    tags: TR,
+    pub posts: PR,
+    pub files: FS,
+    pub tags: TR,
 }
 
 impl<PR: PostRepository, FS: FileStorage, TR: TagRepository> CreatePostUseCase<PR, FS, TR> {
     pub async fn execute(
         &self,
         title: String,
-        file_bytes: Vec<u8>,
+        temp_file_path: PathBuf,
         file_ext: Option<&str>,
         tags: Vec<NewTag>
     ) -> Result<PostID, RepoError> {
-        let file_id = self.files.save(&file_bytes, file_ext)
+        let file_id = self.files.save_temp_file(temp_file_path, file_ext)
             .await
             .map_err(|_| RepoError::StorageError)?;
 

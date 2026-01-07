@@ -55,4 +55,21 @@ impl FileStorage for LocalFileStorage {
 
         Err(StorageError::NotFound)
     }
+
+    async fn save_temp_file(&self, temp_path: PathBuf, ext: Option<&str>) -> Result<FileID, StorageError> {
+        let id = Uuid::new_v4();
+        let filename = match ext {
+            Some(e) => format!("{}.{}", id, e),
+            None => id.to_string(),
+        };
+        let target_path = self.root.join(filename);
+
+        // Просто перемещаем файл (rename атомарен и мгновенен в пределах одной ФС)
+        fs::rename(temp_path, target_path)
+            .await
+            .map_err(|_| StorageError::Io)?;
+
+        Ok(id)
+    }
 }
+

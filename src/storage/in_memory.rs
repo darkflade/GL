@@ -9,7 +9,7 @@ pub struct InMemoryTagRepository {
     tags: Vec<Tag>,
 }
 pub struct InMemoryFileRepository {
-    files: Vec<File>,
+    handlers: Vec<File>,
 }
 
 impl InMemoryPostRepository {

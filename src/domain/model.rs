@@ -116,6 +116,13 @@ pub struct PlaylistSummary {
     pub tags: Vec<Tag>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: Uuid,
+    pub username: String,
+    pub password_hash: String,
+}
+
 // Classes for request
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NewTag {
@@ -128,6 +135,12 @@ pub struct NewPost {
     pub id: PostID,
     pub title: String,
     pub file_id: FileID,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NewUser {
+    pub username: String,
+    pub password_hash: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
