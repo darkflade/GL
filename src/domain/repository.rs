@@ -3,15 +3,11 @@ use uuid::Uuid;
 use crate::domain::model::{File, FileID, NewPost, NewTag, NewUser, Playlist, PlaylistID, PlaylistQuery, PlaylistSummary, PlaylistWithItems, Post, PostID, RepoError, Tag, TagID, TagQuery, User};
 
 #[async_trait]
-pub trait FileRepository: Send + Sync {
-    async fn get(&self, id: FileID) -> Result<File, RepoError>;
-}
-
-#[async_trait]
 pub trait PostRepository: Send + Sync {
     async fn create(&self, post: NewPost, tag_ids: &[TagID]) -> Result<PostID, RepoError> ;
     async fn get(&self, id: PostID) -> Result<Post, RepoError>;
     async fn search(&self, query: TagQuery) -> Result<Vec<Post>, RepoError>;
+    async fn get_all(&self) -> Result<Vec<Post>, RepoError>;
 }
 
 #[async_trait]
@@ -34,9 +30,15 @@ pub trait TagRepository: Send + Sync {
 
 #[async_trait]
 pub trait UserRepository: Send + Sync {
-    
+
     async fn find_by_id(&self, id: Uuid) -> Result<User, RepoError>;
     async fn find_by_username(&self, username: &str) -> Result<User, RepoError>;
     async fn create(&self, user: NewUser) -> Result<Uuid, RepoError>;
+}
+
+#[async_trait]
+pub trait FileRepository: Send + Sync {
+    async fn create(&self, file_info: File) -> Result<FileID,RepoError>;
+    async fn get(&self, id: FileID) -> Result<File, RepoError>;
 }
 

@@ -1,4 +1,5 @@
-use crate::domain::model::{PlaylistQuery, Tag};
+use std::path::PathBuf;
+use crate::domain::model::{File, PlaylistQuery, Tag};
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -29,13 +30,12 @@ impl PlaylistRepository for PostgresPlaylistRepository {
             .map_err(|_| RepoError::StorageError)?
             .ok_or(RepoError::NotFound)?;
 
-        //TODO Make request for tags motherfucker
         Ok(
             Playlist {
                 id: row.id,
                 title: row.title,
                 description: row.description.unwrap_or_default(),
-                tag_ids: vec![],
+                tags: vec![],
                 cover: row.cover_file_id,
             }
         )
@@ -51,10 +51,22 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                 pi.position,
                 pi.post_id,
                 pi.note_text,
+
+                -- Post Data
                 p.title as post_title,
-                p.file_id as post_file_id
+                p.description as post_desc,
+
+                -- File Data
+                f.id as file_id,
+                f.path as file_path,
+                f.hash as file_hash,
+                f.media_type as "media_type: i16",
+                f.meta as file_meta,
+                f.created_at as created_at
+
             FROM playlist_items pi
             LEFT JOIN posts p ON pi.post_id = p.id
+            LEFT JOIN files f ON p.file_id = f.id
             WHERE pi.playlist_id = $1
             ORDER BY pi.position ASC
             "#,
@@ -66,12 +78,23 @@ impl PlaylistRepository for PostgresPlaylistRepository {
 
         let items = items_rows.into_iter().map(|row| {
             let content = if let Some(p_id) = row.post_id {
+                let file_obj = File {
+                    id: row.file_id,
+                    path: PathBuf::from(row.file_path),
+                    hash: row.file_hash,
+                    media_type: row.media_type.into(),
+                    meta: serde_json::from_value(row.file_meta.unwrap_or_default()).unwrap_or_default(),
+                    created_at: row.created_at,
+                };
                 PlaylistContent::Post(Post {
                     id: p_id,
                     title: row.post_title,
-                    tag_ids: vec![],
-                    file_id: row.post_file_id,
-                    notes: None,
+                    description: row.post_desc,
+                    //TODO Decide Tags
+                    tags: vec![],
+                    file: file_obj,
+                    //TODO Playlist Notes
+                    notes: vec![],
                 })
             } else {
                 PlaylistContent::Note(row.note_text.unwrap_or_default())
@@ -79,7 +102,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
 
             PlaylistItem {
                 id: row.item_id,
-                playlist_id: id.clone(),
+                playlist_id: id,
                 position: row.position as u32,
                 content,
             }
@@ -130,6 +153,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
         Ok(summaries)
     }
 
+    //TODO Make search
     async fn search(&self, query: PlaylistQuery) -> Result<Vec<Playlist>, RepoError> {
         Ok(vec![])
     }

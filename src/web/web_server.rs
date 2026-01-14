@@ -4,8 +4,9 @@ use actix_session::storage::CookieSessionStore;
 use actix_web::{web, App, HttpServer};
 use actix_web::cookie::Key;
 use actix_web::web::Data;
+use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
-use crate::domain::repository::{PlaylistRepository, PostRepository, TagRepository, UserRepository};
+use crate::domain::repository::{FileRepository, PlaylistRepository, PostRepository, TagRepository, UserRepository};
 use crate::web::handlers::files::{download_file};
 use crate::web::handlers::playlists::{create_playlist, delete_playlist, get_my_playlists, get_playlist_details};
 use crate::web::handlers::posts::{create_post, get_post, search_posts};
@@ -14,12 +15,14 @@ use crate::web::handlers::users::{get_current_user, login_user, logout_user, reg
 pub async fn run_web_server<
     PR,
     TR,
+    FR,
     PLR,
     UR,
     FS,
 >(
     post_repo: PR,
     tag_repo: TR,
+    file_repo: FR,
     playlist_repo: PLR,
     user_repo: UR,
     file_storage: FS,
@@ -30,15 +33,25 @@ pub async fn run_web_server<
 where
     PR:     PostRepository      + Clone + Send + Sync + 'static,
     TR:     TagRepository       + Clone + Send + Sync + 'static,
+    FR:     FileRepository      + Clone + Send + Sync + 'static,
     PLR:    PlaylistRepository  + Clone + Send + Sync + 'static,
     UR:     UserRepository      + Clone + Send + Sync + 'static,
     FS:     FileStorage         + Clone + Send + Sync + 'static,
 {
-    let post_data = Data::new(post_repo);
-    let tag_data = Data::new(tag_repo);
+
+
+    let services = Services::new(
+        post_repo,
+        tag_repo,
+        file_repo,
+        file_storage,
+    );
+
+    let services_data = Data::new(services);
+
+
     let playlist_data = Data::new(playlist_repo);
     let user_data = Data::new(user_repo);
-    let files_data = Data::new(file_storage);
 
     let apply_key = Key::derive_from(secret_key.as_bytes());
 
@@ -50,11 +63,9 @@ where
                 CookieSessionStore::default(),
                 apply_key.clone()
             ))
-            .app_data(post_data.clone())
-            .app_data(tag_data.clone())
+            .app_data(services_data.clone())
             .app_data(playlist_data.clone())
             .app_data(user_data.clone())
-            .app_data(files_data.clone())
             .service(
                 web::scope("/api")
 
@@ -76,14 +87,14 @@ where
 
                     .service(
                         web::scope("/posts")
-                            .route("", web::get().to(search_posts::<PR>))
-                            .route("", web::post().to(create_post::<PR, TR, FS>))
+                            .route("", web::post().to(create_post::<PR, TR, FR, FS>))
+                            .route("/search", web::post().to(search_posts::<PR, TR, FR, FS>))
                             .route("/{id}", web::get().to(get_post::<PR>))
                     )
 
                     .service(
                         web::scope("/files")
-                            .route("/{id}",web::get().to(download_file::<FS>))
+                            .route("/{id}",web::get().to(download_file::<PR, TR, FR, FS>))
                     )
             )
     })

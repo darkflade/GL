@@ -1,6 +1,9 @@
+use sqlx::types::Json;
+use crate::storage::postgres::dto::FileResponse;
+use crate::storage::postgres::dto::TagResponse;
 use async_trait::async_trait;
 use sqlx::PgPool;
-use crate::domain::model::{NewPost, Post, PostID, RepoError, TagID, TagQuery};
+use crate::domain::model::{File, NewPost, Post, PostID, RepoError, Tag, TagID, TagQuery};
 use crate::domain::repository::PostRepository;
 
 #[derive(Clone)]
@@ -53,9 +56,37 @@ impl PostRepository for PostgresPostRepository {
     async fn get(&self, id: PostID) -> Result<Post, RepoError> {
         let row = sqlx::query!(
             r#"
-            SELECT p.id, p.title, p.file_id
+            SELECT
+                p.id,
+                p.title,
+                p.description,
+                COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', pt.tag_id,
+                            'value', t.value,
+                            'category', t.category
+                        )
+                    ) FILTER (WHERE pt.tag_id IS NOT NULL),
+                '[]'::jsonb
+                ) AS "tags!: Json<Vec<TagResponse>>",
+                 (
+                    SELECT jsonb_build_object(
+                        'id', f.id,
+                        'hash', f.hash,
+                        'media_type', f.media_type,
+                        'meta', f.meta,
+                        'path', f.path
+                    )
+                    FROM files f
+                    WHERE f.id = p.file_id
+                ) AS "file!: Json<FileResponse>"
             FROM posts p
+            LEFT JOIN post_tags pt ON pt.post_id = p.id
+            LEFT JOIN tags t ON t.id = pt.tag_id
+            LEFT JOIN files f ON f.id = p.file_id
             WHERE p.id = $1
+            GROUP BY p.id
             "#,
             id
         )
@@ -65,38 +96,59 @@ impl PostRepository for PostgresPostRepository {
 
         let row = row.ok_or(RepoError::NotFound)?;
 
-        let tags = sqlx::query!(
-            r#"
-            SELECT tag_id
-            FROM post_tags
-            WHERE post_id = $1
-            "#,
-            id
-        )
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|_| RepoError::StorageError)?;
 
-        Ok(Post {
-            id: row.id,
-            title: row.title,
-            file_id: row.file_id,
-            tag_ids: tags.into_iter().map(|r| r.tag_id).collect(),
-            notes: None,
-        })
+        Ok(
+            Post {
+                id: row.id,
+                title: row.title,
+                description: row.description,
+                file: row.file.0.into(),
+                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                notes: vec![],
+            }
+        )
     }
 
     async fn search(&self, query: TagQuery) -> Result<Vec<Post>, RepoError> {
+        //TODO Where must not
         let rows = sqlx::query!(
             r#"
-            SELECT p.id, p.title, p.file_id
+            SELECT
+                p.id,
+                p.title,
+                p.description,
+                COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', pt.tag_id,
+                            'value', t.value,
+                            'category', t.category
+                        )
+                    ) FILTER (WHERE pt.tag_id IS NOT NULL),
+                '[]'::jsonb
+                ) AS "tags!: Json<Vec<TagResponse>>",
+                (
+                    SELECT jsonb_build_object(
+                        'id', f.id,
+                        'path', f.path,
+                        'hash', f.hash,
+                        'media_type', f.media_type,
+                        'meta', f.meta,
+                        'created_at', f.created_at
+                    )
+                    FROM files f
+                    WHERE f.id = p.file_id
+                ) AS "file!: Json<FileResponse>"
             FROM posts p
-            JOIN post_tags pt ON pt.post_id = p.id
+            LEFT JOIN post_tags pt ON pt.post_id = p.id
+            LEFT JOIN tags t ON t.id = pt.tag_id
+            LEFT JOIN files f ON f.id = p.file_id
             WHERE
                 ($1::uuid[] IS NULL OR pt.tag_id = ANY($1))
             GROUP BY p.id
             HAVING
                 COUNT(DISTINCT CASE WHEN pt.tag_id = ANY($2) THEN pt.tag_id END) = cardinality($2)
+            LIMIT 50
             "#,
             &query.should[..],
             &query.must[..]
@@ -108,10 +160,67 @@ impl PostRepository for PostgresPostRepository {
         Ok(rows.into_iter().map(|r| Post {
             id: r.id,
             title: r.title,
-            file_id: r.file_id,
-            tag_ids: vec![],
-            notes: None,
+            description: r.description,
+            file: r.file.0.into(),
+            tags: r.tags.0.into_iter().map(Tag::from).collect(),
+            notes: vec![],
         }).collect())
+    }
+
+    async fn get_all(&self) -> Result<Vec<Post>, RepoError> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT
+                p.id,
+                p.title,
+                p.description,
+                COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', pt.tag_id,
+                            'value', t.value,
+                            'category', t.category
+                        )
+                    ) FILTER (WHERE pt.tag_id IS NOT NULL),
+                '[]'::jsonb
+                ) AS "tags!: Json<Vec<TagResponse>>",
+                (
+                    SELECT jsonb_build_object(
+                        'id', f.id,
+                        'path', f.path,
+                        'hash', f.hash,
+                        'media_type', f.media_type,
+                        'meta', f.meta,
+                        'created_at', f.created_at
+                    )
+                    FROM files f
+                    WHERE f.id = p.file_id
+                ) AS "file!: Json<FileResponse>"
+            FROM posts p
+            LEFT JOIN post_tags pt ON pt.post_id = p.id
+            LEFT JOIN tags t ON t.id = pt.tag_id
+            LEFT JOIN files f ON f.id = p.file_id
+            GROUP BY p.id
+            LIMIT 50
+            "#
+        )
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| {
+                println!("{}", e);
+                RepoError::StorageError
+            })?;
+
+
+        Ok(rows.into_iter().map(|r| Post {
+            id:             r.id,
+            title:          r.title,
+            file:           r.file.0.into(),
+            description:    r.description,
+            tags:           r.tags.0.into_iter().map(Tag::from).collect(),
+            notes:          vec![],
+        }).collect())
+
     }
 
 }

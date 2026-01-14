@@ -1,128 +1,131 @@
-use std::path::PathBuf;
+use std::path::{Path};
 use actix_multipart::Multipart;
 use actix_web::{web, Error, HttpResponse};
-use tokio::fs::File;
+use actix_web::web::{Bytes, Data};
 use uuid::Uuid;
 use futures_util::{StreamExt, TryStreamExt};
-use tokio::io::AsyncWriteExt;
-use crate::application::repository::CreatePostUseCase;
+use serde_json::from_slice;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
-use crate::domain::model::{NewTag, RepoError, TagCategory, TagQuery};
-use crate::domain::repository::{PostRepository, TagRepository};
+use crate::domain::model::{ByteStream, NewTag, RepoError, StorageError, TagCategory, TagQuery};
+use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
+use crate::web::handlers::dto::CreatePostMeta;
 
-pub async fn search_posts<PR: PostRepository + Clone>(
-    post_repo:  web::Data<PR>,
+pub async fn search_posts<PR, TR, FR, FS>(
+    services:  Data<Services<PR, TR, FR, FS>>,
     query:      web::Json<TagQuery>,
 ) -> Result<HttpResponse, Error>
+where
+    PR: PostRepository + Clone,
+    TR: TagRepository + Clone,
+    FR: FileRepository + Clone,
+    FS: FileStorage + Clone,
 {
+
     let tag_query = query.into_inner();
 
-    match post_repo.search(tag_query).await {
+    println!("search requested");
+
+    if tag_query.must.is_empty() 
+        && tag_query.should.is_empty() 
+        && tag_query.must_not.is_empty() 
+    {
+        return match services.get_all_posts.execute().await {
+            Ok(posts) => Ok(HttpResponse::Ok().json(posts)),
+            //TODO add logger
+            Err(_) => Ok(HttpResponse::InternalServerError().body("Search failed")),
+        }
+    }
+
+    match services.search_posts.execute(tag_query).await {
         Ok(posts) => Ok(HttpResponse::Ok().json(posts)),
         //TODO add logger
         Err(_) => Ok(HttpResponse::InternalServerError().body("Search failed")),
     }
 }
 
-#[derive(serde::Deserialize)]
-struct CreatePostMeta {
-    title: String,
-    tags: Vec<String>,
-}
-
-pub async fn create_post<PR, TR, FS>(
+pub async fn create_post<PR, TR, FR, FS>(
     mut payload:    Multipart,
-    post_repo:      web::Data<PR>,
-    tag_repo:       web::Data<TR>,
-    files:          web::Data<FS>,
+    services:       Data<Services<PR, TR, FR, FS>>,
 ) -> Result<HttpResponse, Error>
 where
     PR: PostRepository + Clone,
     TR: TagRepository + Clone,
+    FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
-    let mut title = None;
-    let mut tags = Vec::new();
-    let mut temp_file_path: Option<PathBuf> = None;
-    let mut file_ext = None;
-
-    let temp_dir = std::env::temp_dir().join("glabs_upload");
-    tokio::fs::create_dir_all(&temp_dir).await?;
+    let mut meta: Option<CreatePostMeta> = None;
 
     while let Ok(Some(mut field)) = payload.try_next().await {
-        let content_disposition = field.content_disposition().unwrap();
-        let field_name = content_disposition.get_name().unwrap_or("");
+        let field_name = field
+            .content_disposition()
+            .and_then(|cd| cd.get_name())
+            .unwrap_or("")
+            .to_owned();
 
-        match field_name {
+        match field_name.as_str() {
             "meta" => {
-                let mut data = Vec::new();
+                let mut body = Vec::new();
                 while let Some(chunk) = field.next().await {
-                    data.extend_from_slice(&chunk?);
+                    body.extend_from_slice(&chunk?);
                 }
-                if let Ok(meta) = serde_json::from_slice::<CreatePostMeta>(&data) {
-                    title = Some(meta.title);
-                    tags = meta.tags;
-                }
+                meta = Some(from_slice(&body).map_err(actix_web::error::ErrorBadRequest)?);
             }
             "file" => {
-                let temp_filename = format!("upload_{}", Uuid::new_v4());
-                let path = temp_dir.join(&temp_filename);
+                let meta_data = match meta {
+                    Some(m) => m,
+                    None => return Ok(HttpResponse::BadRequest().body("Meta must be before file")),
+                };
 
-                let mut f = File::create(&path).await?;
+                let content_type = field.content_type().cloned();
 
-                if let Some(filename) = content_disposition.get_filename() {
-                    if let Some(ext) = std::path::Path::new(filename).extension() {
-                        file_ext = Some(ext.to_string_lossy().to_string());
+                let file_ext = field
+                    .content_disposition()
+                    .and_then(|cd| cd.get_filename())
+                    .and_then(|n| Path::new(n).extension())
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_string());
+
+                let (tx, rx) = mpsc::channel::<Result<Bytes, StorageError>>(8);
+
+                actix_web::rt::spawn(async move {
+                    while let Some(chunk) = field.next().await {
+                        let _ = tx.send(chunk.map_err(|_| StorageError::Io)).await;
                     }
-                }
+                });
 
-                while let Some(chunk) = field.next().await {
-                    let data = chunk?;
-                    f.write_all(&data).await?;
-                }
-                f.flush().await?;
+                let stream: ByteStream = Box::pin(ReceiverStream::new(rx));
 
-                temp_file_path = Some(path);
+                let new_tags: Vec<NewTag> = meta_data.tags.iter().map(|t| NewTag {
+                    //TODO There is something wrong
+                    category: TagCategory::General,
+                    value: t.clone(),
+                }).collect();
+
+                let res = services.create_post.execute(
+                    meta_data.title.clone(),
+                    stream,
+                    file_ext.as_deref(),
+                    content_type,
+                    new_tags,
+
+                ).await;
+
+                return match res {
+                    Ok(id) => Ok(HttpResponse::Created().json(id)),
+                    Err(e) => Ok(HttpResponse::InternalServerError().body(format!("Upload failed {:?}", e))),
+                };
             }
             _ => {
-                while let Some(_) = field.next().await {}
+                continue;
             }
         }
     }
 
 
-    let title = match title {
-        Some(title) => title,
-        None => return Ok(HttpResponse::BadRequest().body("Missing 'meta' field or invalid JSON")),
-    };
-    let path = match temp_file_path {
-        Some(p ) => p,
-        None => return Ok(HttpResponse::BadRequest().body("Missing 'file' field")),
-    };
-
-    let use_case = CreatePostUseCase {
-        posts: post_repo.get_ref().clone(),
-        tags: tag_repo.get_ref().clone(),
-        files: files.get_ref().clone(),
-    };
-
-    let new_tags: Vec<NewTag> = tags.into_iter().map(|t| NewTag {
-        category: TagCategory::General,
-        value: t,
-    }).collect();
-
-    let res = use_case.execute(
-        title,
-        path,
-        file_ext.as_deref(),
-        new_tags,
-    ).await;
-
-    match res {
-        Ok(id) => Ok(HttpResponse::Ok().json(id)),
-        //TODO logger
-        Err(e) => Ok(HttpResponse::InternalServerError().body(format!("{:?}", e))),
-    }
+    Ok(HttpResponse::BadRequest().body("Missing file"))
 }
 
 pub async fn get_post<PR: PostRepository + Clone>(

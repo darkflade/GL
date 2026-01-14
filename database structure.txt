@@ -62,6 +62,14 @@ CREATE TABLE users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE TABLE post_notes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    pos_x REAL NOT NULL, -- f32
+    pos_y REAL NOT NULL  -- f32
+);
+
 -- Добавляем владельца к плейлистам
 ALTER TABLE playlists ADD COLUMN owner_id UUID REFERENCES users(id) ON DELETE CASCADE;
 

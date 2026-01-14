@@ -1,5 +1,6 @@
 use sqlx::postgres::PgPoolOptions;
-use crate::storage::files::LocalFileStorage;
+use storage::file_storage::files::LocalFileStorage;
+use crate::storage::postgres::files::PostgresFileRepository;
 use crate::web::web_server;
 use crate::storage::postgres::posts::PostgresPostRepository;
 use crate::storage::postgres::tags::PostgresTagRepository;
@@ -9,7 +10,6 @@ use crate::storage::postgres::users::PostgresUserRepository;
 mod domain;
 mod application;
 mod storage;
-mod file_storage;
 mod web;
 
 #[tokio::main]
@@ -32,13 +32,24 @@ async fn main() {
         .await
         .expect("Failed to connect to Postgres");
 
-    let post_repo = PostgresPostRepository::new(pool.clone());
-    let tag_repo = PostgresTagRepository::new(pool.clone());
-    let playlist_repo = PostgresPlaylistRepository::new(pool.clone());
+    let post_repo   = PostgresPostRepository::new(pool.clone());
+    let tag_repo    = PostgresTagRepository::new(pool.clone());
+    let file_repo           = PostgresFileRepository::new(pool.clone());
+    let playlist_repo   = PostgresPlaylistRepository::new(pool.clone());
     let user_repo = PostgresUserRepository::new(pool.clone());
     let file_storage = LocalFileStorage::new("./gl_posts");
 
     println!("Server running at http://{}:{}",server_ip_address, server_port);
-    web_server::run_web_server(post_repo, tag_repo, playlist_repo, user_repo, file_storage, server_ip_address, server_port, secret_key).await.expect("Failed to run web server");
+    web_server::run_web_server(
+        post_repo,
+        tag_repo,
+        file_repo,
+        playlist_repo,
+        user_repo,
+        file_storage,
+        server_ip_address,
+        server_port,
+        secret_key
+    ).await.expect("Failed to run web server");
     
 }
