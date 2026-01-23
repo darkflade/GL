@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                p.id,\n                p.title,\n                p.description,\n                COALESCE(\n                    jsonb_agg(\n                        jsonb_build_object(\n                            'id', pt.tag_id,\n                            'value', t.value,\n                            'category', t.category\n                        )\n                    ) FILTER (WHERE pt.tag_id IS NOT NULL),\n                '[]'::jsonb\n                ) AS \"tags!: Json<Vec<TagResponse>>\",\n                 (\n                    SELECT jsonb_build_object(\n                        'id', f.id,\n                        'hash', f.hash,\n                        'media_type', f.media_type,\n                        'meta', f.meta,\n                        'path', f.path\n                    )\n                    FROM files f\n                    WHERE f.id = p.file_id\n                ) AS \"file!: Json<FileResponse>\"\n            FROM posts p\n            LEFT JOIN post_tags pt ON pt.post_id = p.id\n            LEFT JOIN tags t ON t.id = pt.tag_id\n            LEFT JOIN files f ON f.id = p.file_id\n            WHERE p.id = $1\n            GROUP BY p.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tags!: Json<Vec<TagResponse>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "file!: Json<FileResponse>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "9f1288bec3fb9acfc01ca44fca35e27bb0a094abaffef94adb397486c6c7aa1a"
+}

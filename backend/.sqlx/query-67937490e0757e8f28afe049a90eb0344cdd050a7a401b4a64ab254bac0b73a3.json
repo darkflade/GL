@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                p.id, p.title, p.description, p.cover_file_id,\n                (SELECT COUNT(*)  FROM playlist_items pi  WHERE pi.playlist_id = p.id) as \"item_count!\",\n                COALESCE(\n                    json_agg(json_build_object('id', t.id, 'value', t.value, 'category', t.category))\n                    FILTER (WHERE t.id IS NOT NULL),\n                    '[]'\n                ) as \"tags!\"\n            FROM playlists p\n            LEFT JOIN playlist_tags pt ON p.id = pt.playlist_id\n            LEFT JOIN tags t ON pt.tag_id = t.id\n            WHERE p.owner_id = $1\n            GROUP BY p.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "cover_file_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "item_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "tags!",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "67937490e0757e8f28afe049a90eb0344cdd050a7a401b4a64ab254bac0b73a3"
+}

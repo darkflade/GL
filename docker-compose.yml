@@ -1,0 +1,36 @@
+services:
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./nginx/Dockerfile
+    ports:
+      - "80:80"
+    volumes:
+      - /srv/media/new:/media/new:ro
+      - /home/darkflade/Pictures/Wallpapers:/media/old:ro
+    depends_on:
+      - backend
+
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: glab
+      POSTGRES_USER: glab
+      POSTGRES_PASSWORD: seeckreet
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./postgres/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+
+  backend:
+    build: ./backend
+    env_file: .env
+    volumes:
+      - /srv/media/new:/media/new:ro
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:

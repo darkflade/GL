@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                p.id,\n                p.title,\n                p.description,\n                COALESCE(\n                    jsonb_agg(\n                        jsonb_build_object(\n                            'id', pt.tag_id,\n                            'value', t.value,\n                            'category', t.category\n                        )\n                    ) FILTER (WHERE pt.tag_id IS NOT NULL),\n                '[]'::jsonb\n                ) AS \"tags!: Json<Vec<TagResponse>>\",\n                (\n                    SELECT jsonb_build_object(\n                        'id', f.id,\n                        'path', f.path,\n                        'hash', f.hash,\n                        'media_type', f.media_type,\n                        'meta', f.meta,\n                        'created_at', f.created_at\n                    )\n                    FROM files f\n                    WHERE f.id = p.file_id\n                ) AS \"file!: Json<FileResponse>\",\n            COUNT(DISTINCT CASE WHEN pt.tag_id = ANY($1) THEN pt.tag_id END) AS should_score\n            FROM posts p\n            LEFT JOIN post_tags pt ON pt.post_id = p.id\n            LEFT JOIN tags t ON t.id = pt.tag_id\n            LEFT JOIN files f ON f.id = p.file_id\n            GROUP BY p.id\n            HAVING\n                COUNT(DISTINCT CASE WHEN pt.tag_id = ANY($2) THEN pt.tag_id END) = cardinality($2)\n                    AND\n                NOT EXISTS (\n                    SELECT 1\n                    FROM post_tags x\n                    WHERE x.post_id = p.id\n                      AND x.tag_id = ANY($3)\n                )\n            ORDER BY should_score DESC\n            LIMIT 50\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tags!: Json<Vec<TagResponse>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "file!: Json<FileResponse>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "should_score",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "3686d323865ad8757eb1167a995b7951ff014c7caa1cd3b577abd0cc01eab67f"
+}
