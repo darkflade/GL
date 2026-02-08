@@ -6,7 +6,6 @@
     import PostCard from "$lib/features/feed/PostCard.svelte";
     import {api} from "$lib/api/client";
     import TagSearch from "$lib/features/feed/TagSearch.svelte";
-    import Header from "$lib/components/layout/Header.svelte";
 
 
     let posts = $state<Post[]>([])
@@ -47,7 +46,6 @@
     }
 </script>
 
-<Header/>
 
 <div class="min-h-screen bg-gray-50 text-gray-900">
     <header class="bg-white border-b sticky top-0 z-20 px-6 py-3 flex items-center justify-between shadow-sm">

@@ -1,16 +1,30 @@
 services:
 
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+      args:
+        MODE: ${FRONTEND_MODE}
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app_modules
+
   nginx:
     build:
       context: .
       dockerfile: ./nginx/Dockerfile
+      args:
+        MODE: ${FRONTEND_MODE}
     ports:
       - "80:80"
     volumes:
+      - ./frontend/build:/usr/share/nginx/html:ro
       - /srv/media/new:/media/new:ro
       - /home/darkflade/Pictures/Wallpapers:/media/old:ro
     depends_on:
       - backend
+      - frontend
 
   postgres:
     image: postgres:latest
@@ -34,3 +48,4 @@ services:
 
 volumes:
   pgdata:
+  frontend_node_modules:
