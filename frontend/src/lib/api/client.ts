@@ -33,6 +33,6 @@ export const api = {
             body: formData,
         })
         if (!response.ok) throw new Error(`Error ${response.text}`)
-        return response.json() as Promise<T>
+        return await response.json() as Promise<T>
     }
 }

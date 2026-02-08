@@ -3,6 +3,7 @@ use crate::domain::model::{FileType, RepoError};
 
 pub fn file_type_from_mime_and_ext(mime: Option<Mime>, ext: Option<&str>) -> Result<FileType, RepoError> {
 
+    //TODO split to business logic type converter
     if let Some(mime) = mime {
         let essence = mime.essence_str();
 
