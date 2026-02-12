@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Button from '$lib/components/ui/Button.svelte';
+    import Button from '$lib/shared/components/ui/Button.svelte';
 </script>
 
 <header class="header">
@@ -12,7 +12,7 @@
             <span>Welcome, some dude!</span>
             <Button>Log Out</Button>
         {:else}
-            <Button href="/login">Войти</Button>
+            <Button>Войти</Button>
         {/if}
     </nav>
 </header>

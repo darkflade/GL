@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Post} from "$lib/domain/models";
+    import type { Post } from "$lib/domain/models/post";
 
     export let post: Post
 

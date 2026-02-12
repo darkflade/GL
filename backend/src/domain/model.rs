@@ -83,6 +83,7 @@ pub struct Tag {
     pub value: String,
     pub category: TagCategory,
 }
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct File {
     pub id: FileID,
@@ -134,12 +135,13 @@ pub struct Playlist {
     pub description: String,
     pub tags: Vec<Tag>,
     pub cover: Option<FileID>,
+    pub items: Vec<PlaylistItem>
 }
 
+//TODO its DTO
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlaylistItem {
     pub id: PlaylistItemID,
-    pub playlist_id: PlaylistID,
     pub position: u32,
     pub content: PlaylistContent,
 }

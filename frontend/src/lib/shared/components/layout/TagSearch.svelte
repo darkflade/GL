@@ -1,9 +1,10 @@
 <script lang="ts">
     import { Combobox } from "bits-ui";
-    import { Check, ChevronsUpDown, X } from "lucide-svelte";
-    import { cn } from "$lib/utils";
-    import { searchTags } from "$lib/features/feed/api";
-    import type {Tag} from "$lib/domain/models";
+    import { Check, X } from "lucide-svelte";
+    import { cn } from "$lib/utils/merge";
+    import { searchTags } from "$lib/application/use-cases/search-tags";
+    import { repositories } from "$lib/composition/repositories";
+    import type { Tag } from "$lib/domain/models/tag";
 
     let { onChange } = $props<{ onChange: (tags: Tag[]) => void }>();
 
@@ -15,20 +16,6 @@
     let filteredTags = $state<Tag[]>([]);
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
-    async function debounceSearch() {
-        if (inputValue.trim().length < 2) {
-            filteredTags = [];
-            return;
-        }
-        try {
-            const res = await searchTags(inputValue);
-            filteredTags = res?.filter(t => !selectedTags.some(s => s.id === t.id)) ?? [];
-        } catch (err) {
-            console.error(err);
-            filteredTags = [];
-        }
-    }
-
     function handleInput(val: string) {
         inputValue = val;
         if (val.trim().length < 2) {
@@ -37,8 +24,13 @@
         }
         clearTimeout(timeout);
         timeout = setTimeout(async () => {
-            const res = await searchTags(val);
-            filteredTags = res ?? [];
+            try {
+                const res = await searchTags(repositories.tags, val);
+                filteredTags = res?.filter(t => !selectedTags.some(s => s.id === t.id)) ?? [];
+            } catch (err) {
+                console.error(err);
+                filteredTags = [];
+            }
         }, 300);
     }
 

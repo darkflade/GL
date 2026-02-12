@@ -16,7 +16,7 @@
         border-radius: 4px;
         cursor: pointer;
     }
-    .btn-primary { background: #3b82f6; color: white; }
-    .btn-secondary { background: #6b7280; color: white; }
+    .btn-primary { background: #ffbb00; color: white; }
+    .btn-secondary { background: #0b0d1a; color: white; }
     .btn-danger { background: #ef4444; color: white; }
 </style>

@@ -118,3 +118,11 @@ pub struct FileMeta {
 }
 
  */
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PlaylistItem {
+    pub id: PlaylistItemID,
+    pub playlist_id: PlaylistID,
+    pub position: u32,
+    pub content: PlaylistContent,
+}
