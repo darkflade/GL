@@ -52,25 +52,40 @@
 
 </script>
 
-<div class="min-h-screen bg-gray-50 text-gray-900">
-        <Header/>
-    <header class="bg-white sticky top-0 z-20 px-6 py-3 flex items-center shadow-sm">
-        <h1 class="text-xl font-bold tracking-tight">
-            Glab Storage
+
+<Header/>
+
+<div class="feed-container">
+    <div class="feed-hero">
+        <h1 class="page-title text-gradient">
+            Explore Inspiration
         </h1>
-        <PostSearchControls value={textSearchValue} onQueryChange={handleSearchQuery} />
-    </header>
-    <main>
+        <p class="page-subtitle">
+            A curated collection of visual excellence from the Glab community.
+        </p>
+    </div>
+
+    <div class="filter-bar-sticky">
+        <div class="filter-bar glass">
+            <div class="search-wrapper">
+                <PostSearchControls value={textSearchValue} onQueryChange={handleSearchQuery} />
+            </div>
+        </div>
+    </div>
+    
+    <main class="feed-content">
         {#if loading}
-            <div class="flex items-center justify-center h-64">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <div class="loading-state">
+                <div class="spinner"></div>
             </div>
         {:else if posts.length === 0}
-            <EmptyList/>
+            <div class="empty-state">
+                <EmptyList/>
+            </div>
         {:else}
-            <div class="grid">
+            <div class="masonry-grid">
                 {#each posts as post (post.id)}
-                    <a href="/post?id={post.id}">
+                    <a href="/post?id={post.id}" class="post-link">
                         <PostCard post={post} size={null} />
                     </a>
                 {/each}
@@ -79,15 +94,127 @@
     </main>
 </div>
 
-
 <style>
-    .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 1rem;
+    .feed-container {
+        min-height: 100vh;
+        padding-top: var(--spacing-2xl);
+        padding-bottom: var(--spacing-2xl);
     }
-    h1 {
-        color: #8e8e8f;
-        font-family: "Symbola";
+
+    .feed-hero {
+        padding: var(--spacing-xl) var(--spacing-lg) var(--spacing-md);
+        max-width: 800px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .page-title {
+        font-size: clamp(2.5rem, 8vw, 4.5rem);
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: -0.04em;
+        margin-bottom: var(--spacing-md);
+        position: relative;
+        z-index: 1;
+        padding: 0.1em 0;
+    }
+
+    .page-subtitle {
+        font-size: var(--text-lg);
+        color: var(--color-text-secondary);
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .filter-bar-sticky {
+        position: sticky;
+        top: calc(var(--header-height) + var(--spacing-md));
+        z-index: 40;
+        margin: 0 var(--spacing-lg) var(--spacing-2xl);
+        display: flex;
+        justify-content: center;
+    }
+
+    .filter-bar {
+        width: 100%;
+        max-width: 700px;
+        padding: 8px;
+        border-radius: var(--radius-full);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .search-wrapper {
+        width: 100%;
+    }
+
+    .feed-content {
+        padding: 0 var(--spacing-lg);
+        max-width: 1800px;
+        margin: 0 auto;
+    }
+
+    .masonry-grid {
+        column-count: 1;
+        column-gap: var(--spacing-lg);
+    }
+
+    .post-link {
+        display: block;
+        margin-bottom: var(--spacing-lg);
+        text-decoration: none;
+        color: inherit;
+        break-inside: avoid;
+        border-radius: var(--radius-lg);
+        transition: transform 0.4s var(--ease-out);
+    }
+
+    .post-link:hover {
+        transform: scale(0.99);
+    }
+
+    .loading-state {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 40vh;
+    }
+
+    .spinner {
+        width: 48px;
+        height: 48px;
+        border: 2px solid var(--color-surface-hover);
+        border-top-color: var(--color-accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Responsive Columns */
+    @media (min-width: 640px) {
+        .masonry-grid {
+            column-count: 2;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .masonry-grid {
+            column-count: 3;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .masonry-grid {
+            column-count: 4;
+        }
+    }
+    
+    @media (min-width: 1600px) {
+        .masonry-grid {
+            column-count: 5;
+        }
     }
 </style>
+
