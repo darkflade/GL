@@ -90,7 +90,7 @@ where
                         web::scope("/posts")
                             .route("", web::post().to(create_post::<PR, TR, FR, FS>))
                             .route("/search", web::post().to(search_posts::<PR, TR, FR, FS>))
-                            .route("/{id}", web::get().to(get_post::<PR>))
+                            .route("/{id}", web::get().to(get_post::<PR, TR, FR, FS>))
                     )
 
                     .service(

@@ -78,7 +78,8 @@ impl PostRepository for PostgresPostRepository {
                         'hash', f.hash,
                         'media_type', f.media_type,
                         'meta', f.meta,
-                        'path', f.path
+                        'path', f.path,
+                        'created_at', f.created_at
                     )
                     FROM files f
                     WHERE f.id = p.file_id
@@ -94,7 +95,10 @@ impl PostRepository for PostgresPostRepository {
         )
             .fetch_optional(&self.pool)
             .await
-            .map_err(|_| RepoError::StorageError)?;
+            .map_err(|e| {
+                eprintln!("Database error: {:?}", e);
+                RepoError::StorageError
+            })?;
 
         let row = row.ok_or(RepoError::NotFound)?;
 

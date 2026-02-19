@@ -27,6 +27,7 @@
         loading = true;
         try {
             posts = await searchPosts(repositories.posts, filters);
+
         } catch (e) {
             console.error(e);
         } finally {
@@ -51,10 +52,9 @@
 
 </script>
 
-<Header/>
-
 <div class="min-h-screen bg-gray-50 text-gray-900">
-    <header class="bg-white border-b sticky top-0 z-20 px-6 py-3 flex items-center shadow-sm">
+        <Header/>
+    <header class="bg-white sticky top-0 z-20 px-6 py-3 flex items-center shadow-sm">
         <h1 class="text-xl font-bold tracking-tight">
             Glab Storage
         </h1>
@@ -70,7 +70,9 @@
         {:else}
             <div class="grid">
                 {#each posts as post (post.id)}
-                    <PostCard {post} />
+                    <a href="/post?id={post.id}">
+                        <PostCard post={post} size={null} />
+                    </a>
                 {/each}
             </div>
         {/if}
@@ -83,6 +85,9 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         gap: 1rem;
-        padding: 1rem;
+    }
+    h1 {
+        color: #8e8e8f;
+        font-family: "Symbola";
     }
 </style>

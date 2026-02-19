@@ -1,7 +1,6 @@
 use std::path::{Path};
 use actix_multipart::Multipart;
 use actix_web::{web, Error, HttpResponse};
-use actix_web::web::{Bytes, Data};
 use uuid::Uuid;
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::from_slice;
@@ -14,7 +13,7 @@ use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
 use crate::web::handlers::dto::CreatePostMeta;
 
 pub async fn search_posts<PR, TR, FR, FS>(
-    services:  Data<Services<PR, TR, FR, FS>>,
+    services:  web::Data<Services<PR, TR, FR, FS>>,
     query:      web::Json<TagQuery>,
 ) -> Result<HttpResponse, Error>
 where
@@ -48,7 +47,7 @@ where
 
 pub async fn create_post<PR, TR, FR, FS>(
     mut payload:    Multipart,
-    services:       Data<Services<PR, TR, FR, FS>>,
+    services:       web::Data<Services<PR, TR, FR, FS>>,
 ) -> Result<HttpResponse, Error>
 where
     PR: PostRepository + Clone,
@@ -88,7 +87,7 @@ where
                     .and_then(|e| e.to_str())
                     .map(|s| s.to_string());
 
-                let (tx, rx) = mpsc::channel::<Result<Bytes, StorageError>>(8);
+                let (tx, rx) = mpsc::channel::<Result<web::Bytes, StorageError>>(8);
 
                 actix_web::rt::spawn(async move {
                     while let Some(chunk) = field.next().await {
@@ -128,22 +127,33 @@ where
     Ok(HttpResponse::BadRequest().body("Missing file"))
 }
 
-pub async fn get_post<PR: PostRepository + Clone>(
-    post_repo:  web::Data<PR>,
+pub async fn get_post<PR, TR, FR, FS>(
+    services:  web::Data<Services<PR, TR, FR, FS>>,
     path:       web::Path<String>,
 ) -> Result<HttpResponse, Error>
+where
+    PR: PostRepository + Clone,
+    TR: TagRepository + Clone,
+    FR: FileRepository + Clone,
+    FS: FileStorage + Clone,
 {
+
     let id_str = path.into_inner();
+
+    print!("Post was requested {:?}", &id_str);
 
     let id = Uuid::parse_str(&id_str)
         .map_err(|_| actix_web::error::ErrorBadRequest("Invalid UUID"))?;
 
-    let result = post_repo.get(id).await;
+    let result = services.get_post.execute(id).await;
 
     match result {
         Ok(post) => Ok(HttpResponse::Ok().json(post)),
         Err(RepoError::NotFound) => Ok(HttpResponse::NotFound().body("Post Not Found")),
-        Err(_) => Ok(HttpResponse::InternalServerError().finish()),
+        Err(e) => {
+            Ok(HttpResponse::InternalServerError().body(format!("{:?}", e)))
+            //Ok(HttpResponse::InternalServerError().finish())
+        },
     }
 
 }

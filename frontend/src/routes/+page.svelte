@@ -6,3 +6,4 @@
         goto("/feed", { replaceState: true });
     });
 </script>
+

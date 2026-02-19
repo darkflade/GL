@@ -50,17 +50,19 @@ impl From<Json<FileMetaResponse>> for FileMeta {
 
 #[derive(Debug, Deserialize)]
 pub struct FileMetaResponse {
-    pub width: i32,
-    pub height: i32,
-    pub duration_ms: i64,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub extension: Option<String>,
+    pub duration_ms: Option<i64>,
 }
 
 impl From<FileMetaResponse> for FileMeta {
     fn from(m: FileMetaResponse) -> Self {
         FileMeta {
-            width: Some(m.width as u32),
-            height: Some(m.height as u32),
-            duration_ms: Some(m.duration_ms as u64),
+            width: m.width.and_then(|w| u32::try_from(w).ok()),
+            height: m.height.and_then(|h| u32::try_from(h).ok()),
+            extension: m.extension,
+            duration_ms: m.duration_ms.and_then(|d| u64::try_from(d).ok()),
         }
     }
 }

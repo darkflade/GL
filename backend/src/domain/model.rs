@@ -97,10 +97,10 @@ pub struct File {
 impl Default for File {
     fn default() -> Self {
         File {
-            id: Uuid::new_v4(),                    // или какой-то ваш "пустой" id
-            path: PathBuf::from(""),          // или PathBuf::new()
+            id: Uuid::new_v4(),                    
+            path: PathBuf::from(""),
             hash: None,
-            media_type: FileType::Picture,    // самый нейтральный, или сделайте отдельный вариант Unknown = 99
+            media_type: FileType::Picture,
             meta: None,
             created_at: None,
         }
@@ -111,6 +111,7 @@ impl Default for File {
 pub struct FileMeta {
     pub width: Option<u32>,
     pub height: Option<u32>,
+    pub extension: Option<String>,
     pub duration_ms: Option<u64>,
 }
 

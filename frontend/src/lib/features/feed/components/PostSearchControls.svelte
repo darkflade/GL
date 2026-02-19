@@ -24,7 +24,7 @@
 
 <div class="search-controls">
     <TextSearch value={value} onSearch={onTextSearch} />
-    <TagSearch onChange={onTagsChange}/>
+<!--    <TagSearch onChange={onTagsChange}/>-->
 </div>
 
 <style>
