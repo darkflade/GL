@@ -191,9 +191,9 @@ pub struct NewUser {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TagQuery {
-    pub must: Vec<TagID>,
-    pub should: Vec<TagID>,
-    pub must_not: Vec<TagID>,
+    pub must: Vec<String>,
+    pub should: Vec<String>,
+    pub must_not: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

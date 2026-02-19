@@ -56,8 +56,9 @@ impl TagRepository for PostgresTagRepository {
 
         Ok(rows.into_iter().map(|r| Tag {
             id: r.id,
+            category: r.category.into(),
             //TODO remove transmute
-            category: unsafe { std::mem::transmute(r.category as i8) },
+            //unsafe { std::mem::transmute(r.category as i8) },
             value: r.value,
         }).collect())
     }

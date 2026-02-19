@@ -1,10 +1,11 @@
 use std::path::PathBuf;
-use crate::domain::model::{File, PlaylistQuery, Tag};
+use crate::domain::model::{File, PlaylistItem, PlaylistQuery, Tag};
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::domain::model::{Playlist, PlaylistContent, PlaylistID, PlaylistItem, PlaylistSummary, PlaylistWithItems, Post, RepoError};
+use crate::domain::model::{Playlist, PlaylistContent, PlaylistID, PlaylistSummary, PlaylistWithItems, Post, RepoError};
 use crate::domain::repository::PlaylistRepository;
+use crate::storage::postgres::dto::PlaylistItemResponse;
 
 #[derive(Clone)]
 pub struct PostgresPlaylistRepository {
@@ -37,6 +38,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                 description: row.description.unwrap_or_default(),
                 tags: vec![],
                 cover: row.cover_file_id,
+                items: vec![],
             }
         )
     }
@@ -102,9 +104,9 @@ impl PlaylistRepository for PostgresPlaylistRepository {
 
             PlaylistItem {
                 id: row.item_id,
-                playlist_id: id,
                 position: row.position as u32,
                 content,
+                
             }
         }).collect();
 

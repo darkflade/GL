@@ -1,16 +1,17 @@
 import type { UUID } from "$lib/domain/value-objects/uuid";
 
 export enum MediaType {
-    Picture = 0,
-    Video = 1,
-    Audio = 2,
+    Picture = "Picture",
+    Video = "Video",
+    Audio = "Audio",
 }
 
 export interface MediaFile {
     id: UUID;
     path: string;
     hash: string;
-    mediaType: MediaType;
+    //TODO make deserialize
+    media_type: MediaType;
     meta: FileMeta;
     createdAt: Date;
 }

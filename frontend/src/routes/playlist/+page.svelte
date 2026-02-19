@@ -1,22 +1,25 @@
 
 <script lang="ts">
     import type { Post } from "$lib/domain/models/post";
-    import type { Tag } from "$lib/domain/models/tag";
     import { page } from "$app/state";
     import { goto } from "$app/navigation";
     import { searchPosts } from "$lib/application/use-cases/search-posts";
     import { repositories } from "$lib/composition/repositories";
     import PostCard from "$lib/features/feed/components/PostCard.svelte";
-    import TagSearch from "$lib/shared/components/layout/TagSearch.svelte";
-    import { deserializeQuery, serializeQuery } from "$lib";
+    import PostSearchControls from "$lib/features/feed/components/PostSearchControls.svelte";
+    import { buildSearchHref, queryFromUrl } from "$lib/features/feed/search-query";
+    import EmptyList from "$lib/shared/components/layout/EmptyList.svelte";
+    import { toSearchInput } from "$lib/utils/search";
     import type { SearchPostsQuery } from "$lib/domain";
 
 
     let posts = $state<Post[]>([])
     let loading = $state(false)
+    let textSearchValue = $state("")
 
     $effect(() => {
-        const filters = deserializeQuery(page.url.searchParams)
+        const filters = queryFromUrl(page.url.searchParams)
+        textSearchValue = toSearchInput(filters)
         fetchData(filters)
     })
 
@@ -31,20 +34,9 @@
         }
     }
 
-    async function handleTagsChange(tags: Tag[]) {
-        const mustIds = tags.map(t => t.id);
-
-
-        loading = true;
+    async function handleSearchQuery(query: SearchPostsQuery) {
         try {
-            console.log("Searching posts in Parent with IDs:", mustIds);
-            const queryString = serializeQuery({
-                must: mustIds,
-                should: [],
-                must_not: []
-            });
-
-            const newLink = queryString ? `?${queryString}` : page.url.pathname;
+            const newLink = buildSearchHref(page.url.pathname, query);
 
             goto(newLink, {
                 keepFocus: true,
@@ -53,10 +45,9 @@
             })
         } catch (e) {
             console.error(e);
-        } finally {
-            loading = false;
         }
     }
+
 </script>
 
 
@@ -65,7 +56,7 @@
         <h1 class="text-xl font-bold tracking-tight">
             Glab Storage
         </h1>
-        <TagSearch onChange={handleTagsChange}/>
+        <PostSearchControls value={textSearchValue} onQueryChange={handleSearchQuery} />
     </header>
     <main>
         {#if loading}
@@ -73,9 +64,7 @@
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
             </div>
         {:else if posts.length === 0}
-            <div class="text-center py-20 text-gray-500">
-                Nothing was discovered
-            </div>
+            <EmptyList/>
         {:else}
             <div class="grid">
                 {#each posts as post (post.id)}

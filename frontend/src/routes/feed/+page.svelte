@@ -1,24 +1,25 @@
 
 <script lang="ts">
     import type { Post } from "$lib/domain/models/post";
-    import type { Tag } from "$lib/domain/models/tag";
-    import { page } from '$app/state';
-    import { goto } from '$app/navigation'
+    import { page } from "$app/state";
+    import { goto } from "$app/navigation";
     import { searchPosts } from "$lib/application/use-cases/search-posts";
     import { repositories } from "$lib/composition/repositories";
     import PostCard from "$lib/features/feed/components/PostCard.svelte";
-    import TagSearch from "$lib/shared/components/layout/TagSearch.svelte";
+    import PostSearchControls from "$lib/features/feed/components/PostSearchControls.svelte";
+    import { buildSearchHref, queryFromUrl } from "$lib/features/feed/search-query";
     import Header from "$lib/shared/components/layout/Header.svelte";
     import EmptyList from "$lib/shared/components/layout/EmptyList.svelte";
-    import {deserializeQuery, serializeQuery} from "$lib";
-    import type {SearchPostsQuery} from "$lib/domain";
-
+    import { toSearchInput } from "$lib/utils/search";
+    import type { SearchPostsQuery } from "$lib/domain";
 
     let posts = $state<Post[]>([])
     let loading = $state(false)
+    let textSearchValue = $state("")
 
     $effect(() => {
-        const filters = deserializeQuery(page.url.searchParams)
+        const filters = queryFromUrl(page.url.searchParams)
+        textSearchValue = toSearchInput(filters)
         fetchData(filters)
     })
 
@@ -34,21 +35,9 @@
     }
 
 
-    async function handleTagsChange(tags: Tag[]) {
-        const mustIds = tags.map(t => t.id);
-
-
-        loading = true;
+    async function handleSearchQuery(query: SearchPostsQuery) {
         try {
-            console.log("Searching posts in Parent with IDs:", mustIds);
-            let queryString = serializeQuery({
-                must: mustIds,
-                should: [],
-                must_not: []
-            });
-
-            const newLink = queryString ? `?${queryString}` : page.url.pathname;
-
+            const newLink = buildSearchHref(page.url.pathname, query);
             goto(newLink, {
                 keepFocus: true,
                 replaceState: false,
@@ -56,9 +45,7 @@
             })
 
         } catch (e) {
-            console.error(e);
-        } finally {
-            loading = false;
+            console.error(e)
         }
     }
 
@@ -67,11 +54,11 @@
 <Header/>
 
 <div class="min-h-screen bg-gray-50 text-gray-900">
-    <header class="bg-white border-b sticky top-0 z-20 px-6 py-3 flex items-center justify-between shadow-sm">
+    <header class="bg-white border-b sticky top-0 z-20 px-6 py-3 flex items-center shadow-sm">
         <h1 class="text-xl font-bold tracking-tight">
             Glab Storage
         </h1>
-        <TagSearch onChange={handleTagsChange}/>
+        <PostSearchControls value={textSearchValue} onQueryChange={handleSearchQuery} />
     </header>
     <main>
         {#if loading}

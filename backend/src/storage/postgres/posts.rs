@@ -1,10 +1,11 @@
-use sqlx::types::Json;
-use crate::storage::postgres::dto::FileResponse;
-use crate::storage::postgres::dto::TagResponse;
 use async_trait::async_trait;
 use sqlx::PgPool;
-use crate::domain::model::{File, NewPost, Post, PostID, RepoError, Tag, TagID, TagQuery};
+use sqlx::types::Json;
+use dto::TagResponse;
+use dto::FileResponse;
+use crate::domain::model::{NewPost, Post, PostID, RepoError, Tag, TagID, TagQuery};
 use crate::domain::repository::PostRepository;
+use crate::storage::postgres::dto;
 
 #[derive(Clone)]
 pub struct PostgresPostRepository {
@@ -111,7 +112,6 @@ impl PostRepository for PostgresPostRepository {
     }
 
     async fn search(&self, query: TagQuery) -> Result<Vec<Post>, RepoError> {
-        //TODO Where must not
         let rows = sqlx::query!(
             r#"
             SELECT
@@ -140,21 +140,31 @@ impl PostRepository for PostgresPostRepository {
                     FROM files f
                     WHERE f.id = p.file_id
                 ) AS "file!: Json<FileResponse>",
-            COUNT(DISTINCT CASE WHEN pt.tag_id = ANY($1) THEN pt.tag_id END) AS should_score
+        
+                COUNT(DISTINCT CASE 
+                    WHEN t.value = ANY($1) THEN t.value 
+                END) AS should_score
+        
             FROM posts p
             LEFT JOIN post_tags pt ON pt.post_id = p.id
             LEFT JOIN tags t ON t.id = pt.tag_id
             LEFT JOIN files f ON f.id = p.file_id
+        
             GROUP BY p.id
+
             HAVING
-                COUNT(DISTINCT CASE WHEN pt.tag_id = ANY($2) THEN pt.tag_id END) = cardinality($2)
-                    AND
+                COUNT(DISTINCT CASE 
+                    WHEN t.value = ANY($2) THEN t.value 
+                END) = cardinality($2)
+                AND
                 NOT EXISTS (
                     SELECT 1
                     FROM post_tags x
+                    JOIN tags tx ON tx.id = x.tag_id
                     WHERE x.post_id = p.id
-                      AND x.tag_id = ANY($3)
+                      AND tx.value = ANY($3)
                 )
+        
             ORDER BY should_score DESC
             LIMIT 50
             "#,

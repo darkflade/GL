@@ -1,9 +1,9 @@
 use std::path::PathBuf;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-use crate::domain::model::{File, FileID, FileMeta, PostID, Tag, TagCategory, TagID};
+use crate::domain::model::{File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID, PostID, Tag, TagCategory, TagID};
 
 #[derive(Debug, Deserialize)]
 pub struct FileResponse {
@@ -120,9 +120,18 @@ pub struct FileMeta {
  */
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PlaylistItem {
+pub struct PlaylistItemResponse {
     pub id: PlaylistItemID,
     pub playlist_id: PlaylistID,
     pub position: u32,
     pub content: PlaylistContent,
+}
+impl From<PlaylistItemResponse> for PlaylistItem {
+    fn from(p: PlaylistItemResponse) -> Self {
+        Self {
+            id: p.id,
+            position: p.position,
+            content: p.content,
+        }
+    }
 }
