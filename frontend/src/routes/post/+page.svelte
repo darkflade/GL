@@ -37,81 +37,121 @@
     }
 </script>
 
-{#if loading}
+<Header/>
 
-{:else if post}
-    <Header/>
-    <header class="header">
-        <div class="name">
-            {`${post.title} ||| ${post.id}`}
+<div class="post-page">
+    {#if loading}
+        <div class="loading-state">
+            <div class="spinner"></div>
         </div>
-        <div class="description">
-            Description: {post.description}
-        </div>
-    </header>
-    <main class="main">
-
-        <div class="tags">
-            <p>Tags</p>
-            {#each post.tags as tag}
-                <div class="tag">
-                    {tag.value}
+    {:else if post}
+        <main class="post-container">
+            <div class="post-header">
+                <h1 class="post-title text-gradient">{post.title}</h1>
+                <p class="post-id">ID: {post.id}</p>
+                
+                <div class="post-tags">
+                    {#each post.tags as tag}
+                        <span class="glass-tag">{tag.value}</span>
+                    {/each}
                 </div>
-            {/each}
-        </div>
-        <div class="content">
-            <PostCard post={post} size="full"/>
-        </div>
+                
+                <p class="post-description">{post.description}</p>
+            </div>
 
-        <div class="post_content">
-
-        </div>
-    </main>
-{:else}
-    <EmptyList/>
-{/if}
+            <div class="post-media-content">
+                <PostCard post={post} size="full"/>
+            </div>
+        </main>
+    {:else}
+        <EmptyList/>
+    {/if}
+</div>
 
 <style>
-    .header {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        margin-top: 1rem;
-
+    .post-page {
+        min-height: calc(100vh - var(--header-height));
+        padding-top: var(--spacing-xl);
+        padding-bottom: var(--spacing-2xl);
     }
 
-    .name {
-        font-size: 20px;
-        font-weight: 600;
+    .post-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 var(--spacing-lg);
     }
 
-    .description {
-        margin-bottom: 10px;
-        color: #666;
+    .post-header {
+        margin-bottom: var(--spacing-2xl);
     }
 
-    .tags {
+    .post-title {
+        font-size: clamp(2.5rem, 5vw, 4rem);
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        margin-bottom: var(--spacing-xs);
+        line-height: 1.1;
+    }
+
+    .post-id {
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        font-family: monospace;
+        letter-spacing: 0.05em;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .post-tags {
         display: flex;
         flex-wrap: wrap;
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .glass-tag {
+        padding: 6px 14px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: var(--radius-full);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-accent-vibrant);
+        backdrop-filter: blur(4px);
+    }
+
+    .post-description {
+        font-size: var(--text-lg);
+        color: var(--color-text-secondary);
+        line-height: 1.6;
+        max-width: 800px;
+    }
+
+    .post-media-content {
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+        box-shadow: var(--shadow-xl);
+        border: 1px solid var(--color-border-bright);
+    }
+
+    .loading-state {
+        display: flex;
+        justify-content: center;
         align-items: center;
-        gap: 6px;
-        margin-bottom: 12px;
+        height: 50vh;
     }
 
-    .tags p {
-        margin: 0;
-        font-weight: 600;
+    .spinner {
+        width: 48px;
+        height: 48px;
+        border: 2px solid var(--color-surface-hover);
+        border-top-color: var(--color-accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
     }
 
-    .tag {
-        padding: 2px 8px;
-        border: 1px solid #000000;
-        border-radius: 999px;
-        font-size: 12px;
+    @keyframes spin {
+        to { transform: rotate(360deg); }
     }
-
-    .content {
-        margin-bottom: 16px;
-    }
-
 </style>
