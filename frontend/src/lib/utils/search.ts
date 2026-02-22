@@ -3,15 +3,20 @@ import type {SearchPostsQuery} from "$lib/domain";
 export function serializeQuery(query: SearchPostsQuery): string {
     const params = new URLSearchParams();
 
-    Object.entries(query).forEach(([key, value]) => {
-        if (!value || value.length === 0) {
-            return;
+    for (const key of ["must", "should", "must_not"] as const) {
+        const values = query.tag_query[key];
+        if (!values || values.length === 0) {
+            continue;
         }
 
-        for (const item of value) {
+        for (const item of values) {
             params.append(key, item);
         }
-    });
+    }
+
+    if (query.cursor?.page && query.cursor.page > 0) {
+        params.set("page", String(query.cursor.page));
+    }
 
     return params.toString();
 }
@@ -27,10 +32,16 @@ export function deserializeQuery(params: URLSearchParams): SearchPostsQuery {
         return params.get(key)?.split(",").map((item) => item.trim()).filter(Boolean) ?? [];
     };
 
+    const rawPage = Number.parseInt(params.get("page") ?? "0", 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
+
     return {
-        must: readValues("must"),
-        should: readValues("should"),
-        must_not: readValues("must_not"),
+        tag_query: {
+            must: readValues("must"),
+            should: readValues("should"),
+            must_not: readValues("must_not"),
+        },
+        cursor: {page},
     }
 }
 
@@ -41,9 +52,12 @@ export function parseSearch(tagString: string): SearchPostsQuery {
         .filter(Boolean)
 
     const searchPostsQuery: SearchPostsQuery = {
-        must: [],
-        should: [],
-        must_not: [],
+        tag_query: {
+            must: [],
+            should: [],
+            must_not: [],
+        },
+        cursor: {page: 0},
     }
 
     for (const token of tokens) {
@@ -54,14 +68,14 @@ export function parseSearch(tagString: string): SearchPostsQuery {
         switch (token[0]) {
             case "~":
                 const shouldTag = token.slice(1).replaceAll("_", " ").trim();
-                if (shouldTag.length > 0) searchPostsQuery.should.push(shouldTag);
+                if (shouldTag.length > 0) searchPostsQuery.tag_query.should.push(shouldTag);
                 break
             case "-":
                 const mustNotTag = token.slice(1).replaceAll("_", " ").trim();
-                if (mustNotTag.length > 0) searchPostsQuery.must_not.push(mustNotTag);
+                if (mustNotTag.length > 0) searchPostsQuery.tag_query.must_not.push(mustNotTag);
                 break
             default:
-                searchPostsQuery.must.push(token.replaceAll("_", " "))
+                searchPostsQuery.tag_query.must.push(token.replaceAll("_", " "))
                 break
         }
     }
@@ -70,9 +84,9 @@ export function parseSearch(tagString: string): SearchPostsQuery {
 }
 
 export function toSearchInput(query: SearchPostsQuery): string {
-    const must = query.must.map((value) => value.replaceAll(" ", "_"))
-    const should = query.should.map((value) => `~${value.replaceAll(" ", "_")}`)
-    const mustNot = query.must_not.map((value) => `-${value.replaceAll(" ", "_")}`)
+    const must = query.tag_query.must.map((value) => value.replaceAll(" ", "_"))
+    const should = query.tag_query.should.map((value) => `~${value.replaceAll(" ", "_")}`)
+    const mustNot = query.tag_query.must_not.map((value) => `-${value.replaceAll(" ", "_")}`)
 
     return [...must, ...should, ...mustNot].join(" ").trim()
 }

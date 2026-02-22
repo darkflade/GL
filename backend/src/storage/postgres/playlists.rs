@@ -1,11 +1,10 @@
 use std::path::PathBuf;
-use crate::domain::model::{File, PlaylistItem, PlaylistQuery, Tag};
+use crate::domain::model::{Cursor, File, PlaylistItem, PlaylistQuery, SearchPlaylistsResponse, Tag, TagQuery, UserID};
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::domain::model::{Playlist, PlaylistContent, PlaylistID, PlaylistSummary, PlaylistWithItems, Post, RepoError};
+use crate::domain::model::{Playlist, PlaylistContent, PlaylistID, PlaylistSummary, Post, RepoError};
 use crate::domain::repository::PlaylistRepository;
-use crate::storage::postgres::dto::PlaylistItemResponse;
 
 #[derive(Clone)]
 pub struct PostgresPlaylistRepository {
@@ -21,31 +20,32 @@ impl PostgresPlaylistRepository {
 #[async_trait]
 impl PlaylistRepository for PostgresPlaylistRepository {
 
-    async fn get(&self, id: PlaylistID) -> Result<Playlist, RepoError> {
-        let row = sqlx::query!(
-            "SELECT id, title, description, cover_file_id FROM playlists WHERE id = $1",
-            id
-        )
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| RepoError::StorageError)?
-            .ok_or(RepoError::NotFound)?;
+    // async fn get(&self, id: PlaylistID) -> Result<Playlist, RepoError> {
+    //     let row = sqlx::query!(
+    //         "SELECT id, title, description, cover_file_id FROM playlists WHERE id = $1",
+    //         id
+    //     )
+    //         .fetch_optional(&self.pool)
+    //         .await
+    //         .map_err(|_| RepoError::StorageError)?
+    //         .ok_or(RepoError::NotFound)?;
+    //
+    //     Ok(
+    //         Playlist {
+    //             id: row.id,
+    //             title: row.title,
+    //             description: row.description.unwrap_or_default(),
+    //             tags: vec![],
+    //             cover: row.cover_file_id,
+    //             items: vec![],
+    //         }
+    //     )
+    // }
 
-        Ok(
-            Playlist {
-                id: row.id,
-                title: row.title,
-                description: row.description.unwrap_or_default(),
-                tags: vec![],
-                cover: row.cover_file_id,
-                items: vec![],
-            }
-        )
-    }
+    async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError> {
+        //let playlist = self.get(user_id.clone(), playlist_id.clone()).await?;
 
-    async fn get_with_items(&self, id: PlaylistID) -> Result<PlaylistWithItems, RepoError> {
-        let playlist = self.get(id.clone()).await?;
-
+        //TODO add user check
         let items_rows = sqlx::query!(
             r#"
             SELECT
@@ -72,7 +72,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
             WHERE pi.playlist_id = $1
             ORDER BY pi.position ASC
             "#,
-            id
+            playlist_id
         )
             .fetch_all(&self.pool)
             .await
@@ -87,6 +87,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                     media_type: row.media_type.into(),
                     meta: serde_json::from_value(row.file_meta.unwrap_or_default()).unwrap_or_default(),
                     created_at: row.created_at,
+                    thumbnail: None,
                 };
                 PlaylistContent::Post(Post {
                     id: p_id,
@@ -110,53 +111,71 @@ impl PlaylistRepository for PostgresPlaylistRepository {
             }
         }).collect();
 
-        Ok(PlaylistWithItems { playlist, items })
+        Ok(Playlist {
+            id: playlist_id,
+            title: "".to_string(),
+            description: "".to_string(),
+            tags: vec![],
+            cover: None,
+            items,
+        })
     }
 
-    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<PlaylistSummary>, RepoError> {
-        let rows = sqlx::query!(
-            r#"
-            SELECT
-                p.id, p.title, p.description, p.cover_file_id,
-                (SELECT COUNT(*)  FROM playlist_items pi  WHERE pi.playlist_id = p.id) as "item_count!",
-                COALESCE(
-                    json_agg(json_build_object('id', t.id, 'value', t.value, 'category', t.category))
-                    FILTER (WHERE t.id IS NOT NULL),
-                    '[]'
-                ) as "tags!"
-            FROM playlists p
-            LEFT JOIN playlist_tags pt ON p.id = pt.playlist_id
-            LEFT JOIN tags t ON pt.tag_id = t.id
-            WHERE p.owner_id = $1
-            GROUP BY p.id
-            "#,
-            user_id
-        )
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| {
-                println!("[DB] Error: {:?}", e);
-                RepoError::StorageError
-            })?;
-
-        let summaries = rows.into_iter().map(|r| {
-            let tags: Vec<Tag> = serde_json::from_value(r.tags).unwrap_or_default();
-
-            PlaylistSummary {
-                id: r.id,
-                title: r.title,
-                description: r.description.unwrap_or_default(),
-                cover: r.cover_file_id,
-                item_count: r.item_count,
-                tags,
-            }
-        }).collect();
-
-        Ok(summaries)
-    }
+    // async fn get(&self, user_id: Uuid) -> Result<Vec<PlaylistSummary>, RepoError> {
+    //     let rows = sqlx::query!(
+    //         r#"
+    //         SELECT
+    //             p.id, p.title, p.description, p.cover_file_id,
+    //             (SELECT COUNT(*)  FROM playlist_items pi  WHERE pi.playlist_id = p.id) as "item_count!",
+    //             COALESCE(
+    //                 json_agg(json_build_object('id', t.id, 'value', t.name, 'category', t.category))
+    //                 FILTER (WHERE t.id IS NOT NULL),
+    //                 '[]'
+    //             ) as "tags!"
+    //         FROM playlists p
+    //         LEFT JOIN playlist_tags pt ON p.id = pt.playlist_id
+    //         LEFT JOIN tags t ON pt.tag_id = t.id
+    //         WHERE p.owner_id = $1
+    //         GROUP BY p.id
+    //         "#,
+    //         user_id
+    //     )
+    //         .fetch_all(&self.pool)
+    //         .await
+    //         .map_err(|e| {
+    //             println!("[DB] Error: {:?}", e);
+    //             RepoError::StorageError
+    //         })?;
+    //
+    //     let summaries = rows.into_iter().map(|r| {
+    //         let tags: Vec<Tag> = serde_json::from_value(r.tags).unwrap_or_default();
+    //
+    //         PlaylistSummary {
+    //             id: r.id,
+    //             title: r.title,
+    //             description: r.description.unwrap_or_default(),
+    //             cover: r.cover_file_id,
+    //             item_count: r.item_count,
+    //             tags,
+    //         }
+    //     }).collect();
+    //
+    //     Ok(summaries)
+    // }
 
     //TODO Make search
-    async fn search(&self, query: PlaylistQuery) -> Result<Vec<Playlist>, RepoError> {
-        Ok(vec![])
+    async fn search_by_tags(&self, user_id: UserID, query: TagQuery, cursor: Cursor) -> Result<SearchPlaylistsResponse, RepoError> {
+        log::debug!("playlists.search_by_tags user={user_id} query={query:?} cursor={cursor:?}");
+        Ok(SearchPlaylistsResponse{
+            playlists: vec![],
+            total_pages: 1,
+        })
+    }
+    async fn get_all(&self, user_id: UserID, cursor: Cursor) -> Result<SearchPlaylistsResponse, RepoError> {
+        log::debug!("playlists.get_all user={user_id} cursor={cursor:?}");
+        Ok(SearchPlaylistsResponse{
+            playlists: vec![],
+            total_pages: 1,
+        })
     }
 }

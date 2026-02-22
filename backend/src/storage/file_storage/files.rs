@@ -55,7 +55,7 @@ impl FileStorage for LocalFileStorage {
         S: Stream<Item = Result<Bytes, StorageError>> + Unpin + Send,
     {
 
-        let id = Uuid::new_v4();
+        let id = Uuid::now_v7();
         let relative_path_buf = self.generate_rel_path(id, ext);
         let full_destination_path = self.root.join(&relative_path_buf);
 
@@ -76,12 +76,12 @@ impl FileStorage for LocalFileStorage {
                 .map_err(|_| StorageError::Io)?;
         }
 
-        let relative_path_string = relative_path_buf.to_str().unwrap().to_string();
+        let relative_path_string = relative_path_buf.to_string_lossy().to_string();
         Ok((id, relative_path_string))
     }
 
     async fn save_temp_file(&self, temp_path: PathBuf, ext: Option<&str>) -> Result<(FileID, RelativePath), StorageError> {
-        let id = Uuid::new_v4();
+        let id = Uuid::now_v7();
         let relative_path_buf = self.generate_rel_path(id, ext);
 
         let full_destination_path = self.root.join(&relative_path_buf);
@@ -101,4 +101,3 @@ impl FileStorage for LocalFileStorage {
         Ok((id, relative_path_string))
     }
 }
-

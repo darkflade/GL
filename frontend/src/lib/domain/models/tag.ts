@@ -3,7 +3,8 @@ import type { UUID } from "$lib/domain/value-objects/uuid";
 export interface Tag {
     id: UUID;
     category: TagCategory;
-    value: string;
+    name: string;
+    count: number;
 }
 
 export enum TagCategory {

@@ -19,7 +19,7 @@
         <img
             src={fileUrl}
             alt={post.title}
-            title={post.tags.map(tag => tag.value).sort().join("|")}
+            title={post.tags.map(tag => tag.name).sort().join("|")}
             loading="lazy"
             class:is-full={fullSize}
         />

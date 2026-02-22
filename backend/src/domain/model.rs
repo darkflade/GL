@@ -9,18 +9,27 @@ use time::OffsetDateTime;
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, StorageError>> + Send>>;
 
 pub type FileID = Uuid;
+pub type CursorID = Uuid;
 pub type PostID = Uuid;
 pub type NoteID = Uuid;
 pub type TagID = Uuid;
 pub type PlaylistID = Uuid;
 pub type PlaylistItemID = Uuid;
+pub type UserID = Uuid;
 pub type RelativePath = String;
+
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum FileType {
     Picture = 0,
     Video = 1,
     Audio = 2,
+}
+#[derive(Clone, Serialize, Deserialize)]
+pub enum ThumbSizeType {
+    Small = 0,
+    Medium = 1,
+    Large = 2,
 }
 
 impl From<i16> for FileType {
@@ -80,8 +89,9 @@ pub struct PostNote {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Tag {
     pub id: TagID,
-    pub value: String,
+    pub name: String,
     pub category: TagCategory,
+    pub count: i32,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -92,17 +102,29 @@ pub struct File {
     pub media_type: FileType,
     pub meta: Option<FileMeta>,
     pub created_at: Option<OffsetDateTime>,
+    pub thumbnail: Option<Thumbnail>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Thumbnail {
+    height: u32,
+    weight: u32,
+    path: PathBuf,
+    size_type: ThumbSizeType,
+    created_at: Option<OffsetDateTime>,
+
 }
 
 impl Default for File {
     fn default() -> Self {
         File {
-            id: Uuid::new_v4(),                    
+            id: Uuid::now_v7(),
             path: PathBuf::from(""),
             hash: None,
             media_type: FileType::Picture,
             meta: None,
             created_at: None,
+            thumbnail: None,
         }
     }
 }
@@ -124,12 +146,6 @@ pub struct StoredFile {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PlaylistWithItems {
-    pub playlist: Playlist,
-    pub items: Vec<PlaylistItem>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 pub struct Playlist {
     pub id: PlaylistID,
     pub title: String,
@@ -139,7 +155,6 @@ pub struct Playlist {
     pub items: Vec<PlaylistItem>
 }
 
-//TODO its DTO
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlaylistItem {
     pub id: PlaylistItemID,
@@ -153,7 +168,7 @@ pub enum PlaylistContent {
     Note(String)
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PlaylistSummary {
     pub id: PlaylistID,
     pub title: String,
@@ -165,7 +180,7 @@ pub struct PlaylistSummary {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct User {
-    pub id: Uuid,
+    pub id: UserID,
     pub username: String,
     pub password_hash: String,
 }
@@ -190,14 +205,25 @@ pub struct NewUser {
     pub password_hash: String,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct TagQuery {
     pub must: Vec<String>,
     pub should: Vec<String>,
     pub must_not: Vec<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+impl Default for TagQuery {
+    fn default() -> Self {
+        Self{
+            must:       vec![],
+            should:     vec![],
+            must_not:   vec![],
+
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PlaylistQuery {
     pub tags: Option<TagQuery>,
     pub name: Option<String>,
@@ -214,4 +240,21 @@ pub enum StorageError {
     NotFound,
     StorageError,
     Io,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Cursor{
+    pub page: i64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SearchPostsResponse {
+    pub posts: Vec<Post>,
+    pub total_pages: i64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SearchPlaylistsResponse {
+    pub playlists: Vec<PlaylistSummary>,
+    pub total_pages: i64,
 }

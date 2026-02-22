@@ -10,7 +10,6 @@ export interface MediaFile {
     id: UUID;
     path: string;
     hash: string;
-    //TODO make deserialize
     media_type: MediaType;
     meta: FileMeta;
     createdAt: Date;

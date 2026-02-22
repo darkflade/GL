@@ -16,9 +16,20 @@
     let posts = $state<Post[]>([])
     let loading = $state(false)
     let textSearchValue = $state("")
+    let currentPage = $state(0)
+    let currentFilters = $state<SearchPostsQuery>({
+        tag_query: {
+            must: [],
+            should: [],
+            must_not: [],
+        },
+        cursor: { page: 0 }
+    })
 
     $effect(() => {
         const filters = queryFromUrl(page.url.searchParams)
+        currentFilters = filters
+        currentPage = filters.cursor.page
         textSearchValue = toSearchInput(filters)
         fetchData(filters)
     })
@@ -26,7 +37,8 @@
     async function fetchData(filters: SearchPostsQuery) {
         loading = true;
         try {
-            posts = await searchPosts(repositories.posts, filters);
+            let ServerResponse = await searchPosts(repositories.posts, filters)
+            posts = ServerResponse.posts
 
         } catch (e) {
             console.error(e);
@@ -50,6 +62,14 @@
         }
     }
 
+    async function changePage(nextPage: number) {
+        const query: SearchPostsQuery = {
+            ...currentFilters,
+            cursor: { page: Math.max(0, nextPage) }
+        };
+        await handleSearchQuery(query);
+    }
+
 </script>
 
 <div class="min-h-screen bg-gray-50 text-gray-900">
@@ -60,6 +80,15 @@
         </h1>
         <PostSearchControls value={textSearchValue} onQueryChange={handleSearchQuery} />
     </header>
+    <div class="pager">
+        <button class="pager-btn" type="button" onclick={() => changePage(currentPage - 1)} disabled={currentPage <= 0}>
+            Prev
+        </button>
+        <span class="pager-label">Page {currentPage + 1}</span>
+        <button class="pager-btn" type="button" onclick={() => changePage(currentPage + 1)}>
+            Next
+        </button>
+    </div>
     <main>
         {#if loading}
             <div class="flex items-center justify-center h-64">
@@ -89,5 +118,32 @@
     h1 {
         color: #8e8e8f;
         font-family: "Symbola";
+    }
+
+    .pager {
+        padding: 0.75rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .pager-btn {
+        border: 1px solid #d1d5db;
+        background: #fff;
+        border-radius: 8px;
+        padding: 0.35rem 0.75rem;
+        cursor: pointer;
+    }
+
+    .pager-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .pager-label {
+        color: #374151;
+        font-weight: 500;
     }
 </style>

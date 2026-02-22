@@ -42,7 +42,7 @@ impl UserRepository for PostgresUserRepository {
     }
 
     async fn create(&self, user: NewUser) -> Result<Uuid, RepoError> {
-        let id = Uuid::new_v4();
+        let id = Uuid::now_v7();
         sqlx::query!(
             "INSERT INTO users (id, username, password_hash) VALUES ($1, $2, $3)",
             id,

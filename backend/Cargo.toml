@@ -8,7 +8,7 @@ async-trait = "0.1.89"
 tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "macros"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", "macros", "uuid", "time"] }
 time = { version = "0.3.45", features = ["serde"] }
-uuid = { version = "1.19.0", features = ["serde", "v4", "fast-rng"] }
+uuid = { version = "1.19.0", features = ["serde", "v7", "fast-rng"] }
 argon2 = "0.5.3"
 actix-web = "4.12.1"
 actix-session = { version = "0.11.0", features = ["cookie-session"] }
@@ -20,4 +20,6 @@ dotenv = "0.15.0"
 futures-util = "0"
 anyhow = "1.0.100"
 tokio-stream = "0.1.17"
-
+log = "0.4.28"
+fern = "0.7.1"
+colored = "3.0.0"

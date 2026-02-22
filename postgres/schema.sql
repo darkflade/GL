@@ -23,14 +23,9 @@ SET row_security = off;
 -- Name: uuid-ossp; Type: EXTENSION; Schema: -; Owner: -
 --
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
-
-
 --
 -- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner: 
 --
-
-COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
 
 
 SET default_tablespace = '';
@@ -42,7 +37,7 @@ SET default_table_access_method = heap;
 --
 
 CREATE TABLE public.files (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id uuid DEFAULT uuidv7() NOT NULL,
     path text NOT NULL,
     hash text,
     media_type smallint NOT NULL,
@@ -58,7 +53,7 @@ ALTER TABLE public.files OWNER TO glab;
 --
 
 CREATE TABLE public.playlist_items (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id uuid DEFAULT uuidv7() NOT NULL,
     playlist_id uuid NOT NULL,
     "position" integer NOT NULL,
     post_id uuid,
@@ -86,12 +81,13 @@ ALTER TABLE public.playlist_tags OWNER TO glab;
 --
 
 CREATE TABLE public.playlists (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id uuid DEFAULT uuidv7() NOT NULL,
     title text NOT NULL,
     description text,
     cover_file_id uuid,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
+    is_public boolean DEFAULT false NOT NULL,
     owner_id uuid
 );
 
@@ -103,7 +99,7 @@ ALTER TABLE public.playlists OWNER TO glab;
 --
 
 CREATE TABLE public.post_notes (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id uuid DEFAULT uuidv7() NOT NULL,
     post_id uuid NOT NULL,
     text text NOT NULL,
     pos_x real NOT NULL,
@@ -130,7 +126,7 @@ ALTER TABLE public.post_tags OWNER TO glab;
 --
 
 CREATE TABLE public.posts (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id uuid DEFAULT uuidv7() NOT NULL,
     title text NOT NULL,
     file_id uuid NOT NULL,
     description text,
@@ -146,20 +142,18 @@ ALTER TABLE public.posts OWNER TO glab;
 --
 
 CREATE TABLE public.tags (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    value text NOT NULL,
-    category smallint DEFAULT 3 NOT NULL
+    id uuid DEFAULT uuidv7() NOT NULL,
+    name text NOT NULL,
+    category smallint DEFAULT 3 NOT NULL,
+    post_count integer DEFAULT 0 NOT NULL
 );
-
-
-ALTER TABLE public.tags OWNER TO glab;
 
 --
 -- Name: users; Type: TABLE; Schema: public; Owner: glab
 --
 
 CREATE TABLE public.users (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id uuid DEFAULT uuidv7() NOT NULL,
     username text NOT NULL,
     password_hash text NOT NULL,
     created_at timestamp with time zone DEFAULT now()
@@ -232,13 +226,6 @@ ALTER TABLE ONLY public.tags
     ADD CONSTRAINT tags_pkey PRIMARY KEY (id);
 
 
---
--- Name: tags tags_value_cat_unique; Type: CONSTRAINT; Schema: public; Owner: glab
---
-
-ALTER TABLE ONLY public.tags
-    ADD CONSTRAINT tags_value_cat_unique UNIQUE (value, category);
-
 
 --
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: glab
@@ -262,13 +249,13 @@ ALTER TABLE ONLY public.users
 
 CREATE INDEX idx_playlist_items_order ON public.playlist_items USING btree (playlist_id, "position");
 
-
 --
 -- Name: playlist_items playlist_items_playlist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
 --
 
 ALTER TABLE ONLY public.playlist_items
     ADD CONSTRAINT playlist_items_playlist_id_fkey FOREIGN KEY (playlist_id) REFERENCES public.playlists(id) ON DELETE CASCADE;
+
 
 
 --
@@ -342,6 +329,67 @@ ALTER TABLE ONLY public.post_tags
 ALTER TABLE ONLY public.posts
     ADD CONSTRAINT posts_file_id_fkey FOREIGN KEY (file_id) REFERENCES public.files(id);
 
+
+CREATE TABLE public.thumbnails (
+    id uuid DEFAULT uuidv7() PRIMARY KEY,
+    file_id uuid NOT NULL REFERENCES public.files(id) ON DELETE CASCADE,
+    path text NOT NULL,
+    width integer NOT NULL,
+    height integer NOT NULL,
+    size_type smallint NOT NULL DEFAULT 1, -- 1: small, 2: medium, etc.
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT unique_file_size UNIQUE (file_id, size_type)
+);
+
+ALTER TABLE public.thumbnails OWNER TO glab;
+
+CREATE UNIQUE INDEX idx_tags_name_lower
+    ON public.tags (name, category);
+
+ALTER TABLE public.tags OWNER TO glab;
+
+CREATE OR REPLACE FUNCTION public.update_tag_count()
+RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE public.tags
+        SET post_count = post_count + 1
+        WHERE id = NEW.tag_id;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE public.tags
+        SET post_count = post_count - 1
+        WHERE id = OLD.tag_id;
+    END IF;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tag_count_trigger
+AFTER INSERT OR DELETE ON public.post_tags
+FOR EACH ROW EXECUTE FUNCTION public.update_tag_count();
+
+
+CREATE TABLE public.tag_relations (
+    parent_id uuid NOT NULL REFERENCES public.tags(id) ON DELETE CASCADE,
+    child_id uuid NOT NULL REFERENCES public.tags(id) ON DELETE CASCADE,
+    is_mutual boolean DEFAULT false NOT NULL ,
+    PRIMARY KEY(parent_id, child_id)
+);
+
+ALTER TABLE public.tag_relations OWNER TO glab;
+
+
+CREATE INDEX thumbnails_file_id_idx
+    ON public.thumbnails(file_id);
+
+CREATE INDEX idx_tags_category ON public.tags(category);
+
+CREATE INDEX idx_posts_file_id ON public.posts(file_id);
+
+CREATE INDEX idx_post_tags_tag_id ON public.post_tags(tag_id);
+CREATE INDEX idx_post_tags_post_id ON public.post_tags(post_id);
 
 --
 -- PostgreSQL database dump complete

@@ -1,8 +1,9 @@
 use actix_identity::IdentityMiddleware;
 use actix_session::SessionMiddleware;
 use actix_session::storage::CookieSessionStore;
-use actix_web::{web, App, HttpServer};
+use actix_web::{App, HttpServer, web};
 use actix_web::cookie::Key;
+use actix_web::middleware::Logger;
 use actix_web::web::Data;
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
@@ -39,8 +40,6 @@ where
     UR:     UserRepository      + Clone + Send + Sync + 'static,
     FS:     FileStorage         + Clone + Send + Sync + 'static,
 {
-
-
     let services = Services::new(
         post_repo,
         tag_repo,
@@ -56,9 +55,11 @@ where
     
     let apply_key = Key::derive_from(secret_key.as_bytes());
 
+    log::info!("binding web server to {ip_address}:{port}");
 
     HttpServer::new(move || {
         App::new()
+            .wrap(Logger::new(r#"%a "%r" %s %b "%{User-Agent}i" %T"#))
             .wrap(IdentityMiddleware::default())
             .wrap(SessionMiddleware::new(
                 CookieSessionStore::default(),

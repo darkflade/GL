@@ -1,14 +1,15 @@
-use actix_web::{web, Error, HttpResponse};
-use actix_web::error::{ErrorBadRequest, ErrorNotFound};
+use actix_web::{HttpResponse, web};
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
 use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
+use crate::web::error::AppError;
 use crate::web::handlers::dto::SearchParams;
+use crate::web::handlers::utils::map_repo_error;
 
 pub async fn search_tags<PR, TR, FR, FS>(
     services: web::Data<Services<PR, TR, FR, FS>>,
     params: web::Query<SearchParams>,
-) -> Result<HttpResponse, Error>
+) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
     TR: TagRepository + Clone,
@@ -20,12 +21,15 @@ where
     let limit = 10;
     
     if query.is_empty() {
-        return Err(ErrorBadRequest("No query given"))
+        return Err(AppError::bad_request("No query given"));
     }
     
-    match services.search_tags.execute(query, limit).await {
-        Ok(tags) => Ok(HttpResponse::Ok().json(tags)),
-        Err(e) => Ok(HttpResponse::NotFound().body(format!("NOt found or {:?}",e)))
-    }
+    let tags = services
+        .search_tags
+        .execute(query, limit)
+        .await
+        .map_err(|err| map_repo_error(err, "Tags not found", "tags.search"))?;
+
+    Ok(HttpResponse::Ok().json(tags))
 
 }

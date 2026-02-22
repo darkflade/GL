@@ -23,10 +23,10 @@ impl TagRepository for PostgresTagRepository {
         let mut result = Vec::new();
         for new_tag in tags {
             let rec = sqlx::query!(
-                "INSERT INTO tags (id, category, value) VALUES ($1, $2, $3)
-                 ON CONFLICT (category, value) DO UPDATE SET value = EXCLUDED.value
-                 RETURNING id, category, value",
-                Uuid::new_v4(),
+                "INSERT INTO tags (id, category, name) VALUES ($1, $2, $3)
+                 ON CONFLICT (category, name) DO UPDATE SET name = EXCLUDED.name
+                 RETURNING id, category, name, post_count AS count",
+                Uuid::now_v7(),
                 new_tag.category as i32,
                 new_tag.value
             )
@@ -36,17 +36,23 @@ impl TagRepository for PostgresTagRepository {
 
             result.push(Tag {
                 id: rec.id,
-                //TODO remove transmute
-                category: unsafe { std::mem::transmute(rec.category as i8) },
-                value: rec.value
+                category: rec.category.into(),
+                name: rec.name,
+                count: rec.count,
             });
         }
         Ok(result)
     }
     async fn search(&self, query: &str, limit: i64) -> Result<Vec<Tag>, RepoError> {
-        let pattern =  format!("{}%", query);
+        let pattern =  format!("{}%", query.to_lowercase());
         let rows = sqlx::query!(
-            "SELECT id, category, value FROM tags WHERE value ILIKE $1 LIMIT $2",
+            "
+            SELECT id, category, name, post_count AS count
+            FROM tags
+            WHERE name LIKE $1
+            ORDER BY count DESC
+            LIMIT $2
+            ",
             pattern,
             limit
         )
@@ -57,9 +63,8 @@ impl TagRepository for PostgresTagRepository {
         Ok(rows.into_iter().map(|r| Tag {
             id: r.id,
             category: r.category.into(),
-            //TODO remove transmute
-            //unsafe { std::mem::transmute(r.category as i8) },
-            value: r.value,
+            name: r.name,
+            count: r.count,
         }).collect())
     }
 }

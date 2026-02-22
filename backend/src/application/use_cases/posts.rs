@@ -3,7 +3,7 @@ use actix_web::mime::Mime;
 use uuid::Uuid;
 use crate::application::helpers::file_type_determinator::file_type_from_mime_and_ext;
 use crate::domain::files::FileStorage;
-use crate::domain::model::{ByteStream, File, NewPost, NewTag, Post, PostID, RepoError, TagQuery};
+use crate::domain::model::{ByteStream, Cursor, File, NewPost, NewTag, Post, PostID, RepoError, SearchPostsResponse, TagQuery};
 use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
 
 // Post Use-Case
@@ -46,6 +46,7 @@ impl<PR: PostRepository, TR: TagRepository, FR: FileRepository, FS: FileStorage>
             hash: None,
             meta: None,
             created_at: None,
+            thumbnail: None,
         };
 
         self.files.create(file_model).await?;
@@ -56,7 +57,7 @@ impl<PR: PostRepository, TR: TagRepository, FR: FileRepository, FS: FileStorage>
 
 
         let new_post = NewPost {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             title,
             file_id,
         };
@@ -78,13 +79,13 @@ pub struct GetAllPostsUseCase<PR> {
 }
 
 impl<PR: PostRepository> SearchPostsUseCase<PR> {
-    pub async fn execute(&self, query: TagQuery) -> Result<Vec<Post>, RepoError> {
-        self.repo.search(query).await
+    pub async fn execute(&self, query: TagQuery, cursor: Cursor) -> Result<SearchPostsResponse, RepoError> {
+        self.repo.search(query, cursor).await
     }
 }
 impl<PR: PostRepository> GetAllPostsUseCase<PR> {
-    pub async fn execute(&self) -> Result<Vec<Post>, RepoError> {
-        self.repo.get_all().await
+    pub async fn execute(&self, cursor: Cursor) -> Result<SearchPostsResponse, RepoError> {
+        self.repo.get_all(cursor).await
     }
 }
 

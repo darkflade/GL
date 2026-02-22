@@ -6,6 +6,7 @@
 
     interface TagSuggestion {
         value: string;
+        count: number;
     }
 
     let {
@@ -69,7 +70,7 @@
             try {
                 const tags = await searchTags(repositories.tags, query);
                 const next = tags
-                    .map((tag: Tag) => ({ value: escapeTagForSearch(tag.value) }))
+                    .map((tag: Tag) => ({ value: escapeTagForSearch(tag.name), count: tag.count }))
                     .filter((tag) => tag.value.length > 0)
                     .slice(0, 8);
                 setSuggestions(next);
@@ -164,7 +165,8 @@
                             applySuggestion(suggestion.value);
                         }}
                     >
-                        {suggestion.value}
+                        <span class="text-search__item-label">{suggestion.value}</span>
+                        <span class="text-search__item-count">({suggestion.count})-</span>
                     </button>
                 {/each}
             {/if}
@@ -230,6 +232,22 @@
         padding: 0.55rem 0.75rem;
         font-size: 0.875rem;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .text-search__item-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .text-search__item-count {
+        color: #6b7280;
+        font-variant-numeric: tabular-nums;
     }
 
     .text-search__item:hover,

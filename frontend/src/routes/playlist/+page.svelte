@@ -26,7 +26,8 @@
     async function fetchData(filters: SearchPostsQuery) {
         loading = true;
         try {
-            posts = await searchPosts(repositories.posts, filters);
+            let ServerResponse = await searchPosts(repositories.posts, filters);
+            posts = ServerResponse.posts
         } catch (e) {
             console.error(e);
         } finally {
@@ -68,7 +69,7 @@
         {:else}
             <div class="grid">
                 {#each posts as post (post.id)}
-                    <PostCard {post} />
+                    <PostCard post = {post} size = {null} />
                 {/each}
             </div>
         {/if}

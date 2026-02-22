@@ -1,23 +1,25 @@
 use async_trait::async_trait;
 use uuid::Uuid;
-use crate::domain::model::{File, FileID, NewPost, NewTag, NewUser, Playlist, PlaylistID, PlaylistQuery, PlaylistSummary, PlaylistWithItems, Post, PostID, RepoError, Tag, TagID, TagQuery, User};
+use crate::domain::model::{Cursor, File, FileID, NewPost, NewTag, NewUser, Playlist, PlaylistID, PlaylistQuery, PlaylistSummary, Post, PostID, RepoError, SearchPlaylistsResponse, SearchPostsResponse, Tag, TagID, TagQuery, User, UserID};
 
 #[async_trait]
 pub trait PostRepository: Send + Sync {
     async fn create(&self, post: NewPost, tag_ids: &[TagID]) -> Result<PostID, RepoError> ;
     async fn get(&self, id: PostID) -> Result<Post, RepoError>;
-    async fn search(&self, query: TagQuery) -> Result<Vec<Post>, RepoError>;
-    async fn get_all(&self) -> Result<Vec<Post>, RepoError>;
+    async fn search(&self, query: TagQuery, cursor: Cursor) -> Result<SearchPostsResponse, RepoError>;
+    async fn get_all(&self, cursor: Cursor) -> Result<SearchPostsResponse, RepoError>;
 }
 
 #[async_trait]
 pub trait PlaylistRepository: Send + Sync {
-    async fn get(&self, id: PlaylistID) -> Result<Playlist, RepoError>;
+    async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError>;
 
-    async fn get_with_items(&self, id: PlaylistID) -> Result<PlaylistWithItems, RepoError>;
+    //TODO clear
 
-    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<PlaylistSummary>, RepoError>;
-    async fn search(&self, query: PlaylistQuery) -> Result<Vec<Playlist>, RepoError>;
+    // async fn get_with_items(&self, id: PlaylistID) -> Result<PlaylistWithItems, RepoError>;
+    // async fn search_by_user(&self, user_id: Uuid, cursor: Uuid) -> Result<Vec<PlaylistSummary>, RepoError>;
+    async fn search_by_tags(&self, user_id: UserID, query: TagQuery, cursor: Cursor) -> Result<SearchPlaylistsResponse, RepoError>;
+    async fn get_all(&self, user_id: UserID, cursor: Cursor) -> Result<SearchPlaylistsResponse, RepoError>;
 }
 
 

@@ -3,16 +3,26 @@ import type { Tag } from "$lib/domain/models/tag";
 import { deserializeQuery, parseSearch, serializeQuery } from "$lib/utils/search";
 
 export const EMPTY_SEARCH_QUERY: SearchPostsQuery = {
-    must: [],
-    should: [],
-    must_not: [],
+    tag_query: {
+        must: [],
+        should: [],
+        must_not: [],
+    },
+    cursor: {
+        page: 0,
+    },
 };
 
 export function queryFromTags(tags: Tag[]): SearchPostsQuery {
     return {
-        must: tags.map((tag) => tag.value),
-        should: [],
-        must_not: [],
+        tag_query: {
+            must: tags.map((tag) => tag.name),
+            should: [],
+            must_not: [],
+        },
+        cursor: {
+            page: 0,
+        }
     };
 }
 

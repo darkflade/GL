@@ -1,4 +1,5 @@
-use crate::domain::model::{Playlist, PlaylistID, PlaylistQuery, RepoError};
+use uuid::Uuid;
+use crate::domain::model::{Cursor, Playlist, PlaylistID, PlaylistQuery, PlaylistSummary, RepoError, SearchPlaylistsResponse, TagQuery, UserID};
 use crate::domain::repository::PlaylistRepository;
 
 // Playlist Use-Case
@@ -11,12 +12,12 @@ pub struct GetPlaylistUseCase<R: PlaylistRepository> {
 }
 impl<R: PlaylistRepository> SearchPlaylistsUseCase<R> {
 
-    pub async fn execute(&self, query: PlaylistQuery) -> Result<Vec<Playlist>, RepoError> {
-        self.repo.search(query).await
+    pub async fn execute(&self, user_id: UserID, query: TagQuery, cursor: Cursor) -> Result<SearchPlaylistsResponse, RepoError> {
+        self.repo.search_by_tags(user_id, query, cursor).await
     }
 }
 impl<R: PlaylistRepository> GetPlaylistUseCase<R> {
-    pub async fn execute(&self, id: PlaylistID) -> Result<Playlist, RepoError> {
-        self.repo.get(id).await
+    pub async fn execute(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError> {
+        self.repo.get(user_id, playlist_id).await
     }
 }

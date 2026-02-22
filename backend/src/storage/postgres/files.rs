@@ -21,6 +21,11 @@ impl PostgresFileRepository {
 #[async_trait]
 impl FileRepository for PostgresFileRepository {
     async fn create(&self, file: File) -> Result<FileID, RepoError> {
+        let file_meta_json = serde_json::to_value(file.meta).map_err(|err| {
+            log::error!("files.create failed to serialize file meta: {err}");
+            RepoError::StorageError
+        })?;
+
         sqlx::query!(
             r#"
                 INSERT INTO files (id, path, hash, media_type, meta)
@@ -30,11 +35,14 @@ impl FileRepository for PostgresFileRepository {
             file.path.to_string_lossy().to_string(),
             file.hash,
             file.media_type as i16,
-            serde_json::to_value(file.meta).unwrap()
+            file_meta_json
         )
             .execute(&self.pool)
             .await
-            .map_err(|_| RepoError::StorageError)?;
+            .map_err(|err| {
+                log::error!("files.create db query failed: {err}");
+                RepoError::StorageError
+            })?;
 
         Ok(file.id)
     }
@@ -58,7 +66,7 @@ impl FileRepository for PostgresFileRepository {
             .fetch_one(&self.pool)
             .await
             .map_err(|e| {
-                println!("{:?}",e);
+                log::error!("files.get db query failed: {e}");
                 RepoError::StorageError })?;
 
 

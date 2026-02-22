@@ -1,12 +1,14 @@
 use actix_identity::Identity;
-use actix_web::{error, web, Error, HttpMessage, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, web};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::SaltString;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::domain::model::{NewUser, User};
+use crate::domain::model::{NewUser, RepoError};
 use crate::domain::repository::UserRepository;
+use crate::web::error::AppError;
+use crate::web::handlers::utils::{map_repo_error, parse_uuid};
 
 
 #[derive(Serialize)]
@@ -25,18 +27,21 @@ pub struct AuthRequest {
 pub async fn get_current_user<UR: UserRepository + Clone>(
     user: Option<Identity>,
     user_repo: web::Data<UR>,
-) -> Result<HttpResponse, Error> {
+) -> Result<HttpResponse, AppError> {
     let user_id = match user {
-        Some(u) => u.id().unwrap(),
-        None => return Ok(HttpResponse::Unauthorized().finish()),
+        Some(u) => u.id().map_err(|err| {
+            log::warn!("failed to resolve identity id from session: {err}");
+            AppError::unauthorized("Unauthorized")
+        })?,
+        None => return Err(AppError::unauthorized("Unauthorized")),
     };
 
-    let uuid = Uuid::parse_str(&user_id)
-        .map_err(|_| error::ErrorBadRequest("Bad ID"))?;
+    let uuid = parse_uuid(&user_id, "user id")?;
 
-    let user_model = user_repo.find_by_id(uuid).await.map_err(|_| {
-        error::ErrorNotFound("User not found")
-    })?;
+    let user_model = user_repo
+        .find_by_id(uuid)
+        .await
+        .map_err(|err| map_repo_error(err, "User not found", "users.find_by_id"))?;
     
     Ok(HttpResponse::Ok().json(UserProfile {
         id: user_model.id,
@@ -49,28 +54,31 @@ pub async fn login_user<UR: UserRepository  + Clone>(
     form: web::Json<AuthRequest>,
     user_repo: web::Data<UR>,
     req: HttpRequest
-) -> Result<HttpResponse, Error> {
-    let user = user_repo.find_by_username(&form.username).await.map_err(|_| {
-        error::ErrorUnauthorized("Invalid username or password")
-    })?;
+) -> Result<HttpResponse, AppError> {
+    let user = user_repo
+        .find_by_username(&form.username)
+        .await
+        .map_err(|_| AppError::unauthorized("Invalid username or password"))?;
 
     let parsed_hash = PasswordHash::new(&user.password_hash)
-        .map_err(|_| error::ErrorInternalServerError("Hash invalid"))?;
+        .map_err(|err| AppError::internal(format!("users.login invalid password hash: {err}")))?;
 
     let is_valid = Argon2::default()
         .verify_password(form.password.as_bytes(), &parsed_hash)
         .is_ok();
 
     if !is_valid {
-        return Err(error::ErrorUnauthorized("Invalid username or password"));
+        return Err(AppError::unauthorized("Invalid username or password"));
     }
 
-    Identity::login(&req.extensions(), user.id.to_string())?;
+    Identity::login(&req.extensions(), user.id.to_string()).map_err(|err| {
+        AppError::internal(format!("users.login failed to set identity in session: {err}"))
+    })?;
 
     Ok(HttpResponse::Ok().json("Successfully logged in"))
 }
 
-pub async fn logout_user(user: Identity) -> Result<HttpResponse, Error> {
+pub async fn logout_user(user: Identity) -> Result<HttpResponse, AppError> {
     user.logout();
     Ok(HttpResponse::Ok().json("Successfully logged out"))
 }
@@ -79,13 +87,13 @@ pub async fn register_user<UR: UserRepository + Clone>(
     form:   web::Json<AuthRequest>,
     user_repo:   web::Data<UR>,
     req:    actix_web::HttpRequest,
-) -> Result<HttpResponse, Error> {
+) -> Result<HttpResponse, AppError> {
 
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     let password_hash = argon2
         .hash_password(form.password.as_bytes(), &salt)
-        .map_err(|_| error::ErrorBadRequest("Invalid password"))?
+        .map_err(|err| AppError::bad_request(format!("Invalid password: {err}")))?
         .to_string();
 
     let new_user = NewUser {
@@ -95,9 +103,14 @@ pub async fn register_user<UR: UserRepository + Clone>(
 
     let user_id = user_repo.create(new_user)
         .await
-        .map_err(|_| error::ErrorBadRequest("User already exists or DB error"))?;
+        .map_err(|err| match err {
+            RepoError::StorageError => AppError::conflict("User already exists"),
+            RepoError::NotFound => AppError::internal("users.register impossible not found state"),
+        })?;
 
-    Identity::login(&req.extensions(), user_id.to_string())?;
+    Identity::login(&req.extensions(), user_id.to_string()).map_err(|err| {
+        AppError::internal(format!("users.register failed to set identity in session: {err}"))
+    })?;
 
     Ok(HttpResponse::Created().body("User registered"))
 }

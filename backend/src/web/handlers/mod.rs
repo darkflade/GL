@@ -4,3 +4,4 @@ pub mod playlists;
 pub mod users;
 mod dto;
 pub mod tags;
+mod utils;

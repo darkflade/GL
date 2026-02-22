@@ -1,9 +1,10 @@
+use std::any::Any;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-use crate::domain::model::{File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID, PostID, Tag, TagCategory, TagID};
+use crate::domain::model::{Cursor, CursorID, File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID, Post, PostID, Tag, TagCategory, TagID};
 
 #[derive(Debug, Deserialize)]
 pub struct FileResponse {
@@ -38,6 +39,7 @@ impl From<FileResponse> for File {
             media_type: row.media_type.into(),
             meta: row.meta.map(FileMeta::from),
             created_at: row.created_at,
+            thumbnail: None,
         }
     }
 }
@@ -78,16 +80,18 @@ pub struct PostResponse {
 #[derive(Debug, Deserialize)]
 pub struct TagResponse {
     pub id: TagID,
-    pub value: String,
+    pub name: String,
     pub category: i16,
+    pub count: i16,
 }
 
 impl From<TagResponse> for Tag {
     fn from(t: TagResponse) -> Self {
         Tag {
             id: t.id,
-            value: t.value,
+            name: t.name,
             category: t.category.into(),
+            count: t.count.into(),
         }
     }
 }

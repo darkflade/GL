@@ -11,14 +11,11 @@
 
     let loading = $state(false)
     let post = $state<Post>()
-    let empty = $state(true)
 
     $effect(() => {
         const id = postIDFromURL(page.url.searchParams)
         if (id != null) {
             fetchData(id)
-        } else {
-            empty = true
         }
 
     })
@@ -27,10 +24,8 @@
         loading = true;
         try {
             post = await getPost(repositories.posts, id);
-            empty = !post
         } catch (e) {
             console.error(e);
-            empty = true
         } finally {
             loading = false
         }
@@ -38,7 +33,7 @@
 </script>
 
 {#if loading}
-
+<p>I am loading</p>
 {:else if post}
     <Header/>
     <header class="header">
@@ -55,7 +50,8 @@
             <p>Tags</p>
             {#each post.tags as tag}
                 <div class="tag">
-                    {tag.value}
+                    {tag.name}
+                    ({tag.count})
                 </div>
             {/each}
         </div>
