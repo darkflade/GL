@@ -257,6 +257,8 @@ impl PostRepository for PostgresPostRepository {
             LEFT JOIN tags t ON t.id = pt.tag_id
             LEFT JOIN files f ON f.id = p.file_id
             GROUP BY p.id
+            ORDER BY p.id DESC
+
             LIMIT $1
             OFFSET $2
             "#,

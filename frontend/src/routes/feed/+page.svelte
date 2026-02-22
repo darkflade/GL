@@ -17,6 +17,7 @@
     let loading = $state(false)
     let textSearchValue = $state("")
     let currentPage = $state(0)
+    let totalPages = $state(0)
     let currentFilters = $state<SearchPostsQuery>({
         tag_query: {
             must: [],
@@ -39,6 +40,7 @@
         try {
             let ServerResponse = await searchPosts(repositories.posts, filters)
             posts = ServerResponse.posts
+            totalPages = ServerResponse.total_pages
 
         } catch (e) {
             console.error(e);
@@ -84,8 +86,8 @@
         <button class="pager-btn" type="button" onclick={() => changePage(currentPage - 1)} disabled={currentPage <= 0}>
             Prev
         </button>
-        <span class="pager-label">Page {currentPage + 1}</span>
-        <button class="pager-btn" type="button" onclick={() => changePage(currentPage + 1)}>
+        <span class="pager-label">Page {currentPage}</span>
+        <button class="pager-btn" type="button" onclick={() => changePage(currentPage + 1)} disabled={currentPage == totalPages - 1}>
             Next
         </button>
     </div>
