@@ -1,7 +1,8 @@
 # First
-[ ] Logic for deleting and redacting posts/playlists/tags
+[ ] Logic for delete and edit 
+  posts/playlists/tags
   Endpoints: DELETE /posts/:id, PATCH /posts/:id, POST /tags, PATCH /tags/:id, DELETE /tags/:id.
-  Post deleting: transaction post_tags, tags.post_cont--, create task for deleting, delete from playlist.
+  Post deleting: transaction post_tags, tags.post_count--, create task for deleting, delete from playlist.
 
 [ ] Playlists system
   Index: (playlist_id, position)

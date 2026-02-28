@@ -1,28 +1,28 @@
+use crate::application::ports::{
+    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+};
 use crate::application::use_cases::files::GetFileUseCase;
 use crate::application::use_cases::playlists::{
-    GetAllPlaylistsUseCase, GetPlaylistUseCase, SearchPlaylistsUseCase,
+    DeletePlaylistUseCase, GetAllPlaylistsUseCase, GetPlaylistUseCase, SearchPlaylistsUseCase,
 };
 use crate::application::use_cases::posts::{
-    CreatePostUseCase, GetAllPostsKeysetUseCase, GetAllPostsUseCase, GetPostUseCase,
-    SearchPostsKeysetUseCase, SearchPostsUseCase,
+    CreatePostUseCase, DeletePostUseCase, GetAllPostsKeysetUseCase, GetAllPostsUseCase,
+    GetPostUseCase, SearchPostsKeysetUseCase, SearchPostsUseCase,
 };
 use crate::application::use_cases::tags::SearchTagsUseCase;
 use crate::domain::files::FileStorage;
-use crate::domain::repository::{
-    FileRepository, PlaylistRepository, PostRepository, TagRepository,
-};
-use std::sync::Arc;
-
 pub struct Services<PR, PLR, TR, FR, FS> {
     //  Posts
     pub create_post: CreatePostUseCase<PR, TR, FR, FS>,
     pub search_posts: SearchPostsUseCase<PR>,
     pub search_posts_keyset: SearchPostsKeysetUseCase<PR>,
     pub get_post: GetPostUseCase<PR>,
+    pub delete_post: DeletePostUseCase<PR>,
     pub get_all_posts: GetAllPostsUseCase<PR>,
     pub get_all_posts_keyset: GetAllPostsKeysetUseCase<PR>,
     //  Playlists
     pub get_playlist: GetPlaylistUseCase<PLR>,
+    pub delete_playlist: DeletePlaylistUseCase<PLR>,
     pub search_playlists: SearchPlaylistsUseCase<PLR>,
     pub get_all_playlists: GetAllPlaylistsUseCase<PLR>,
     //  Tags
@@ -51,6 +51,9 @@ where
             get_post: GetPostUseCase {
                 repo: posts.clone(),
             },
+            delete_post: DeletePostUseCase {
+                repo: posts.clone(),
+            },
             get_all_posts: GetAllPostsUseCase {
                 repo: posts.clone(),
             },
@@ -65,6 +68,9 @@ where
             },
             //  Playlist
             get_playlist: GetPlaylistUseCase {
+                repo: playlist.clone(),
+            },
+            delete_playlist: DeletePlaylistUseCase {
                 repo: playlist.clone(),
             },
             search_playlists: SearchPlaylistsUseCase {

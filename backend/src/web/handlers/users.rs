@@ -1,5 +1,6 @@
-use crate::domain::model::{NewUser, RepoError};
-use crate::domain::repository::UserRepository;
+use crate::application::contracts::NewUser;
+use crate::application::ports::UserRepository;
+use crate::domain::model::RepoError;
 use crate::web::error::AppError;
 use crate::web::handlers::utils::{map_repo_error, parse_uuid};
 use actix_identity::Identity;

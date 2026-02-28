@@ -1,19 +1,39 @@
+use crate::application::contracts::{
+    KeysetCursor, KeysetDirection, KeysetPageCursor, PaginationMode, PlaylistQuery,
+    SearchPlaylistsResponse,
+};
+use crate::application::ports::PlaylistRepository;
 use crate::domain::model::{
-    File, KeysetCursor, NextKeysetCursor, PaginationMode, Playlist, PlaylistContent, PlaylistID,
-    PlaylistItem, PlaylistQuery, PlaylistSummary, Post, RepoError, SearchPlaylistsResponse, Tag,
+    Playlist, PlaylistContent, PlaylistID, PlaylistItem, PlaylistSummary, Post, RepoError, Tag,
     UserID,
 };
-use crate::domain::repository::PlaylistRepository;
-use crate::storage::postgres::dto::TagResponse;
+use crate::storage::postgres::dto::{FileResponse, TagResponse};
 use async_trait::async_trait;
+use serde::Deserialize;
 use sqlx::PgPool;
 use sqlx::types::Json;
-use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PostgresPlaylistRepository {
     pool: PgPool,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistItemPayload {
+    id: Uuid,
+    position: i32,
+    post: Option<PlaylistPostPayload>,
+    note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistPostPayload {
+    id: Uuid,
+    title: String,
+    description: Option<String>,
+    file: FileResponse,
+    tags: Vec<TagResponse>,
 }
 
 impl PostgresPlaylistRepository {
@@ -34,15 +54,45 @@ impl PostgresPlaylistRepository {
     fn build_keyset_response(
         mut entries: Vec<(PlaylistSummary, f64)>,
         limit: i64,
+        direction: KeysetDirection,
+        use_cursor: bool,
     ) -> SearchPlaylistsResponse {
-        let has_next = entries.len() as i64 > limit;
-        if has_next {
+        let has_more_in_direction = entries.len() as i64 > limit;
+        if has_more_in_direction {
             entries.truncate(limit as usize);
         }
 
+        if matches!(direction, KeysetDirection::Prev) {
+            entries.reverse();
+        }
+
+        let has_next = if matches!(direction, KeysetDirection::Next) {
+            has_more_in_direction
+        } else {
+            use_cursor
+        };
+        let has_prev = if matches!(direction, KeysetDirection::Prev) {
+            has_more_in_direction
+        } else {
+            use_cursor
+        };
+
         let next_cursor = if has_next {
-            entries.last().map(|(playlist, score)| NextKeysetCursor {
+            entries.last().map(|(playlist, score)| KeysetPageCursor {
                 mode: PaginationMode::Keyset,
+                direction: KeysetDirection::Next,
+                last_id: playlist.id,
+                last_score: *score,
+                limit,
+            })
+        } else {
+            None
+        };
+
+        let prev_cursor = if has_prev {
+            entries.first().map(|(playlist, score)| KeysetPageCursor {
+                mode: PaginationMode::Keyset,
+                direction: KeysetDirection::Prev,
                 last_id: playlist.id,
                 last_score: *score,
                 limit,
@@ -54,23 +104,118 @@ impl PostgresPlaylistRepository {
         SearchPlaylistsResponse {
             playlists: entries.into_iter().map(|(playlist, _)| playlist).collect(),
             has_next,
+            has_prev,
             next_cursor,
+            prev_cursor,
         }
+    }
+
+    fn map_playlist_items(items: Vec<PlaylistItemPayload>) -> Vec<PlaylistItem> {
+        items
+            .into_iter()
+            .map(|item| {
+                let content = match item.post {
+                    Some(post) => PlaylistContent::Post(Post {
+                        id: post.id,
+                        title: post.title,
+                        description: post.description,
+                        tags: post.tags.into_iter().map(Tag::from).collect(),
+                        file: post.file.into(),
+                        notes: vec![],
+                    }),
+                    None => PlaylistContent::Note(item.note.unwrap_or_default()),
+                };
+
+                PlaylistItem {
+                    id: item.id,
+                    position: item.position.max(0) as u32,
+                    content,
+                }
+            })
+            .collect()
     }
 }
 
 #[async_trait]
 impl PlaylistRepository for PostgresPlaylistRepository {
     async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError> {
-        let playlist_row = sqlx::query!(
+        let row = sqlx::query!(
             r#"
             SELECT
-                p.id,
-                p.title,
-                COALESCE(p.description, '') AS "description!",
-                p.cover_file_id AS cover
-            FROM playlists p
-            WHERE p.id = $1 AND p.owner_id = $2
+                pl.id,
+                pl.title,
+                COALESCE(pl.description, '') AS "description!",
+                pl.cover_file_id AS cover,
+                COALESCE(
+                    (
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'id', t.id,
+                                'name', t.name,
+                                'category', t.category,
+                                'count', t.post_count
+                            )
+                            ORDER BY t.name
+                        )
+                        FROM playlist_tags pt
+                        JOIN tags t ON t.id = pt.tag_id
+                        WHERE pt.playlist_id = pl.id
+                    ),
+                    '[]'::jsonb
+                ) AS "tags!: Json<Vec<TagResponse>>",
+                COALESCE(
+                    (
+                        SELECT jsonb_agg(item ORDER BY (item->>'position')::int)
+                        FROM (
+                            SELECT jsonb_build_object(
+                                'id', pi.id,
+                                'position', pi.position,
+                                'post',
+                                CASE
+                                    WHEN pi.post_id IS NULL THEN NULL
+                                    ELSE jsonb_build_object(
+                                        'id', p.id,
+                                        'title', p.title,
+                                        'description', p.description,
+                                        'file', jsonb_build_object(
+                                            'id', f.id,
+                                            'path', f.path,
+                                            'hash', f.hash,
+                                            'media_type', f.media_type,
+                                            'meta', f.meta,
+                                            'created_at', f.created_at
+                                        ),
+                                        'tags', COALESCE(
+                                            (
+                                                SELECT jsonb_agg(
+                                                    jsonb_build_object(
+                                                        'id', t2.id,
+                                                        'name', t2.name,
+                                                        'category', t2.category,
+                                                        'count', t2.post_count
+                                                    )
+                                                    ORDER BY t2.name
+                                                )
+                                                FROM post_tags ptt
+                                                JOIN tags t2 ON t2.id = ptt.tag_id
+                                                WHERE ptt.post_id = p.id
+                                            ),
+                                            '[]'::jsonb
+                                        )
+                                    )
+                                END,
+                                'note', pi.note_text
+                            ) AS item
+                            FROM playlist_items pi
+                            LEFT JOIN posts p ON p.id = pi.post_id
+                            LEFT JOIN files f ON f.id = p.file_id
+                            WHERE pi.playlist_id = pl.id
+                        ) raw_items
+                    ),
+                    '[]'::jsonb
+                ) AS "items!: Json<Vec<PlaylistItemPayload>>"
+            FROM playlists pl
+            WHERE pl.id = $1 AND pl.owner_id = $2
             "#,
             playlist_id,
             user_id
@@ -85,123 +230,46 @@ impl PlaylistRepository for PostgresPlaylistRepository {
             RepoError::StorageError
         })?;
 
-        let playlist_row = playlist_row.ok_or(RepoError::NotFound)?;
-
-        let tags_rows = sqlx::query!(
-            r#"
-            SELECT
-                t.id,
-                t.name,
-                t.category AS "category!: i16",
-                t.post_count AS "count!: i16"
-            FROM playlist_tags pt
-            JOIN tags t ON t.id = pt.tag_id
-            WHERE pt.playlist_id = $1
-            ORDER BY t.name ASC
-            "#,
-            playlist_id
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|err| {
-            log::error!(
-                "playlists.get failed to fetch tags for {}: {err}",
-                playlist_id
-            );
-            RepoError::StorageError
-        })?;
-
-        let items_rows = sqlx::query!(
-            r#"
-            SELECT
-                pi.id as item_id,
-                pi.position,
-                pi.post_id,
-                pi.note_text,
-
-                -- Post Data
-                p.title as post_title,
-                p.description as post_desc,
-
-                -- File Data
-                f.id as file_id,
-                f.path as file_path,
-                f.hash as file_hash,
-                f.media_type as "media_type: i16",
-                f.meta as file_meta,
-                f.created_at as created_at
-
-            FROM playlist_items pi
-            LEFT JOIN posts p ON pi.post_id = p.id
-            LEFT JOIN files f ON p.file_id = f.id
-            WHERE pi.playlist_id = $1
-            ORDER BY pi.position ASC
-            "#,
-            playlist_id
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|err| {
-            log::error!(
-                "playlists.get failed to fetch items for {}: {err}",
-                playlist_id
-            );
-            RepoError::StorageError
-        })?;
-
-        let items = items_rows
-            .into_iter()
-            .map(|row| {
-                let content = if let Some(p_id) = row.post_id {
-                    let file_obj = File {
-                        id: row.file_id,
-                        path: PathBuf::from(row.file_path),
-                        hash: row.file_hash,
-                        media_type: row.media_type.into(),
-                        meta: row
-                            .file_meta
-                            .and_then(|meta| serde_json::from_value(meta).ok()),
-                        created_at: row.created_at,
-                        thumbnail: None,
-                    };
-                    PlaylistContent::Post(Post {
-                        id: p_id,
-                        title: row.post_title,
-                        description: row.post_desc,
-                        //TODO Decide Tags
-                        tags: vec![],
-                        file: file_obj,
-                        //TODO Playlist Notes
-                        notes: vec![],
-                    })
-                } else {
-                    PlaylistContent::Note(row.note_text.unwrap_or_default())
-                };
-
-                PlaylistItem {
-                    id: row.item_id,
-                    position: row.position as u32,
-                    content,
-                }
-            })
-            .collect();
+        let row = row.ok_or(RepoError::NotFound)?;
 
         Ok(Playlist {
             id: playlist_id,
-            title: playlist_row.title,
-            description: playlist_row.description,
-            tags: tags_rows
-                .into_iter()
-                .map(|row| Tag {
-                    id: row.id,
-                    name: row.name,
-                    category: row.category.into(),
-                    count: row.count as i32,
-                })
-                .collect(),
-            cover: playlist_row.cover,
-            items,
+            title: row.title,
+            description: row.description,
+            tags: row.tags.0.into_iter().map(Tag::from).collect(),
+            cover: row.cover,
+            items: Self::map_playlist_items(row.items.0),
         })
+    }
+
+    async fn update(
+        &self,
+        user_id: UserID,
+        playlist_id: PlaylistID,
+        _update_playlist: Playlist,
+    ) -> Result<(), RepoError> {
+        log::debug!("update playlist {}, {}", user_id, playlist_id);
+        Ok(())
+    }
+
+    async fn delete(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<(), RepoError> {
+        let result = sqlx::query!(
+            "DELETE FROM playlists WHERE id = $1 AND owner_id = $2",
+            playlist_id,
+            user_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|err| {
+            log::error!("playlists.delete failed for {}: {err}", playlist_id);
+            RepoError::StorageError
+        })?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepoError::NotFound);
+        }
+
+        Ok(())
     }
 
     async fn search(
@@ -214,8 +282,13 @@ impl PlaylistRepository for PostgresPlaylistRepository {
 
         let limit = Self::resolve_keyset_limit(&cursor);
         let query_limit = limit + 1;
-
         let use_cursor = cursor.last_id.is_some() && cursor.last_score.is_some();
+        let requested_direction = cursor.direction.unwrap_or_default();
+        let direction = if use_cursor {
+            requested_direction
+        } else {
+            KeysetDirection::Next
+        };
         let last_id = cursor.last_id.unwrap_or_else(Uuid::nil);
         let last_score = cursor.last_score.unwrap_or(f64::MAX);
 
@@ -223,106 +296,207 @@ impl PlaylistRepository for PostgresPlaylistRepository {
         let use_text_filter = !text.is_empty();
         let text_pattern = format!("%{text}%");
 
-        let rows = sqlx::query!(
-            r#"
-            WITH ranked_playlists AS (
-                SELECT
-                    pl.id,
-                    pl.title,
-                    COALESCE(pl.description, '') AS description,
-                    pl.cover_file_id AS cover,
-                    COUNT(DISTINCT pi.id)::bigint AS item_count,
-                    COALESCE(
-                        jsonb_agg(
-                            DISTINCT jsonb_build_object(
-                                'id', t.id,
-                                'name', t.name,
-                                'category', t.category,
-                                'count', t.post_count
+        let parsed_rows: Vec<(PlaylistSummary, f64)> = match direction {
+            KeysetDirection::Next => sqlx::query!(
+                r#"
+                    WITH ranked_playlists AS (
+                        SELECT
+                            pl.id,
+                            pl.title,
+                            COALESCE(pl.description, '') AS description,
+                            pl.cover_file_id AS cover,
+                            COUNT(DISTINCT pi.id)::bigint AS item_count,
+                            COALESCE(
+                                jsonb_agg(
+                                    DISTINCT jsonb_build_object(
+                                        'id', t.id,
+                                        'name', t.name,
+                                        'category', t.category,
+                                        'count', t.post_count
+                                    )
+                                ) FILTER (WHERE t.id IS NOT NULL),
+                                '[]'::jsonb
+                            ) AS tags,
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($1) THEN t.name
+                            END)::bigint AS should_score
+                        FROM playlists pl
+                        LEFT JOIN playlist_items pi ON pi.playlist_id = pl.id
+                        LEFT JOIN playlist_tags plt ON plt.playlist_id = pl.id
+                        LEFT JOIN tags t ON t.id = plt.tag_id
+                        WHERE
+                            pl.owner_id = $2
+                            AND (
+                                $3 = false
+                                OR pl.title ILIKE $4
+                                OR COALESCE(pl.description, '') ILIKE $4
                             )
-                        ) FILTER (WHERE t.id IS NOT NULL),
-                        '[]'::jsonb
-                    ) AS tags,
-                    COUNT(DISTINCT CASE
-                        WHEN t.name = ANY($1) THEN t.name
-                    END)::bigint AS should_score
-                FROM playlists pl
-                LEFT JOIN playlist_items pi ON pi.playlist_id = pl.id
-                LEFT JOIN playlist_tags plt ON plt.playlist_id = pl.id
-                LEFT JOIN tags t ON t.id = plt.tag_id
-                WHERE
-                    pl.owner_id = $2
-                    AND (
-                        $3 = false
-                        OR pl.title ILIKE $4
-                        OR COALESCE(pl.description, '') ILIKE $4
+                        GROUP BY pl.id
+                        HAVING
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($5) THEN t.name
+                            END) = cardinality($5)
+                            AND
+                            NOT EXISTS (
+                                SELECT 1
+                                FROM playlist_tags x
+                                JOIN tags tx ON tx.id = x.tag_id
+                                WHERE x.playlist_id = pl.id
+                                  AND tx.name = ANY($6)
+                            )
                     )
-                GROUP BY pl.id
-                HAVING
-                    COUNT(DISTINCT CASE
-                        WHEN t.name = ANY($5) THEN t.name
-                    END) = cardinality($5)
-                    AND
-                    NOT EXISTS (
-                        SELECT 1
-                        FROM playlist_tags x
-                        JOIN tags tx ON tx.id = x.tag_id
-                        WHERE x.playlist_id = pl.id
-                          AND tx.name = ANY($6)
-                    )
+                    SELECT
+                        id,
+                        title,
+                        description AS "description!",
+                        cover,
+                        item_count AS "item_count!: i64",
+                        tags AS "tags!: Json<Vec<TagResponse>>",
+                        should_score AS "should_score!: i64"
+                    FROM ranked_playlists
+                    WHERE
+                        $7 = false
+                        OR should_score::double precision < $8
+                        OR (should_score::double precision = $8 AND id < $9)
+                    ORDER BY should_score DESC, id DESC
+                    LIMIT $10
+                    "#,
+                &query.tags.should[..],
+                user_id,
+                use_text_filter,
+                text_pattern,
+                &query.tags.must[..],
+                &query.tags.must_not[..],
+                use_cursor,
+                last_score,
+                last_id,
+                query_limit
             )
-            SELECT
-                id,
-                title,
-                description AS "description!",
-                cover,
-                item_count AS "item_count!: i64",
-                tags AS "tags!: Json<Vec<TagResponse>>",
-                should_score AS "should_score!: i64"
-            FROM ranked_playlists
-            WHERE
-                $7 = false
-                OR should_score::double precision < $8
-                OR (should_score::double precision = $8 AND id < $9)
-            ORDER BY should_score DESC, id DESC
-            LIMIT $10
-            "#,
-            &query.tags.should[..],
-            user_id,
-            use_text_filter,
-            text_pattern,
-            &query.tags.must[..],
-            &query.tags.must_not[..],
-            use_cursor,
-            last_score,
-            last_id,
-            query_limit
-        )
-        .fetch_all(&self.pool)
-        .await
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            PlaylistSummary {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                cover: row.cover,
+                                item_count: row.item_count,
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                            },
+                            row.should_score as f64,
+                        )
+                    })
+                    .collect()
+            }),
+            KeysetDirection::Prev => sqlx::query!(
+                r#"
+                    WITH ranked_playlists AS (
+                        SELECT
+                            pl.id,
+                            pl.title,
+                            COALESCE(pl.description, '') AS description,
+                            pl.cover_file_id AS cover,
+                            COUNT(DISTINCT pi.id)::bigint AS item_count,
+                            COALESCE(
+                                jsonb_agg(
+                                    DISTINCT jsonb_build_object(
+                                        'id', t.id,
+                                        'name', t.name,
+                                        'category', t.category,
+                                        'count', t.post_count
+                                    )
+                                ) FILTER (WHERE t.id IS NOT NULL),
+                                '[]'::jsonb
+                            ) AS tags,
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($1) THEN t.name
+                            END)::bigint AS should_score
+                        FROM playlists pl
+                        LEFT JOIN playlist_items pi ON pi.playlist_id = pl.id
+                        LEFT JOIN playlist_tags plt ON plt.playlist_id = pl.id
+                        LEFT JOIN tags t ON t.id = plt.tag_id
+                        WHERE
+                            pl.owner_id = $2
+                            AND (
+                                $3 = false
+                                OR pl.title ILIKE $4
+                                OR COALESCE(pl.description, '') ILIKE $4
+                            )
+                        GROUP BY pl.id
+                        HAVING
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($5) THEN t.name
+                            END) = cardinality($5)
+                            AND
+                            NOT EXISTS (
+                                SELECT 1
+                                FROM playlist_tags x
+                                JOIN tags tx ON tx.id = x.tag_id
+                                WHERE x.playlist_id = pl.id
+                                  AND tx.name = ANY($6)
+                            )
+                    )
+                    SELECT
+                        id,
+                        title,
+                        description AS "description!",
+                        cover,
+                        item_count AS "item_count!: i64",
+                        tags AS "tags!: Json<Vec<TagResponse>>",
+                        should_score AS "should_score!: i64"
+                    FROM ranked_playlists
+                    WHERE
+                        $7 = false
+                        OR should_score::double precision > $8
+                        OR (should_score::double precision = $8 AND id > $9)
+                    ORDER BY should_score ASC, id ASC
+                    LIMIT $10
+                    "#,
+                &query.tags.should[..],
+                user_id,
+                use_text_filter,
+                text_pattern,
+                &query.tags.must[..],
+                &query.tags.must_not[..],
+                use_cursor,
+                last_score,
+                last_id,
+                query_limit
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            PlaylistSummary {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                cover: row.cover,
+                                item_count: row.item_count,
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                            },
+                            row.should_score as f64,
+                        )
+                    })
+                    .collect()
+            }),
+        }
         .map_err(|err| {
             log::error!("playlists.search db query failed: {err}");
             RepoError::StorageError
         })?;
 
-        let parsed_rows = rows
-            .into_iter()
-            .map(|row| {
-                (
-                    PlaylistSummary {
-                        id: row.id,
-                        title: row.title,
-                        description: row.description,
-                        cover: row.cover,
-                        item_count: row.item_count,
-                        tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                    },
-                    row.should_score as f64,
-                )
-            })
-            .collect();
-
-        Ok(Self::build_keyset_response(parsed_rows, limit))
+        Ok(Self::build_keyset_response(
+            parsed_rows,
+            limit,
+            direction,
+            use_cursor,
+        ))
     }
 
     async fn get_all(
@@ -335,68 +509,136 @@ impl PlaylistRepository for PostgresPlaylistRepository {
         let limit = Self::resolve_keyset_limit(&cursor);
         let query_limit = limit + 1;
         let use_cursor = cursor.last_id.is_some();
+        let requested_direction = cursor.direction.unwrap_or_default();
+        let direction = if use_cursor {
+            requested_direction
+        } else {
+            KeysetDirection::Next
+        };
         let last_id = cursor.last_id.unwrap_or_else(Uuid::nil);
 
-        let rows = sqlx::query!(
-            r#"
-            SELECT
-                pl.id,
-                pl.title,
-                COALESCE(pl.description, '') AS "description!",
-                pl.cover_file_id AS cover,
-                COUNT(DISTINCT pi.id)::bigint AS "item_count!: i64",
-                COALESCE(
-                    jsonb_agg(
-                        DISTINCT jsonb_build_object(
-                            'id', t.id,
-                            'name', t.name,
-                            'category', t.category,
-                            'count', t.post_count
+        let parsed_rows: Vec<(PlaylistSummary, f64)> = match direction {
+            KeysetDirection::Next => sqlx::query!(
+                r#"
+                    SELECT
+                        pl.id,
+                        pl.title,
+                        COALESCE(pl.description, '') AS "description!",
+                        pl.cover_file_id AS cover,
+                        COUNT(DISTINCT pi.id)::bigint AS "item_count!: i64",
+                        COALESCE(
+                            jsonb_agg(
+                                DISTINCT jsonb_build_object(
+                                    'id', t.id,
+                                    'name', t.name,
+                                    'category', t.category,
+                                    'count', t.post_count
+                                )
+                            ) FILTER (WHERE t.id IS NOT NULL),
+                            '[]'::jsonb
+                        ) AS "tags!: Json<Vec<TagResponse>>",
+                        0::bigint AS "should_score!: i64"
+                    FROM playlists pl
+                    LEFT JOIN playlist_items pi ON pi.playlist_id = pl.id
+                    LEFT JOIN playlist_tags plt ON plt.playlist_id = pl.id
+                    LEFT JOIN tags t ON t.id = plt.tag_id
+                    WHERE
+                        pl.owner_id = $1
+                        AND ($2 = false OR pl.id < $3)
+                    GROUP BY pl.id
+                    ORDER BY pl.id DESC
+                    LIMIT $4
+                    "#,
+                user_id,
+                use_cursor,
+                last_id,
+                query_limit,
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            PlaylistSummary {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                cover: row.cover,
+                                item_count: row.item_count,
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                            },
+                            row.should_score as f64,
                         )
-                    ) FILTER (WHERE t.id IS NOT NULL),
-                    '[]'::jsonb
-                ) AS "tags!: Json<Vec<TagResponse>>",
-                0::bigint AS "should_score!: i64"
-            FROM playlists pl
-            LEFT JOIN playlist_items pi ON pi.playlist_id = pl.id
-            LEFT JOIN playlist_tags plt ON plt.playlist_id = pl.id
-            LEFT JOIN tags t ON t.id = plt.tag_id
-            WHERE
-                pl.owner_id = $1
-                AND ($2 = false OR pl.id < $3)
-            GROUP BY pl.id
-            ORDER BY pl.id DESC
-            LIMIT $4
-            "#,
-            user_id,
-            use_cursor,
-            last_id,
-            query_limit,
-        )
-        .fetch_all(&self.pool)
-        .await
+                    })
+                    .collect()
+            }),
+            KeysetDirection::Prev => sqlx::query!(
+                r#"
+                    SELECT
+                        pl.id,
+                        pl.title,
+                        COALESCE(pl.description, '') AS "description!",
+                        pl.cover_file_id AS cover,
+                        COUNT(DISTINCT pi.id)::bigint AS "item_count!: i64",
+                        COALESCE(
+                            jsonb_agg(
+                                DISTINCT jsonb_build_object(
+                                    'id', t.id,
+                                    'name', t.name,
+                                    'category', t.category,
+                                    'count', t.post_count
+                                )
+                            ) FILTER (WHERE t.id IS NOT NULL),
+                            '[]'::jsonb
+                        ) AS "tags!: Json<Vec<TagResponse>>",
+                        0::bigint AS "should_score!: i64"
+                    FROM playlists pl
+                    LEFT JOIN playlist_items pi ON pi.playlist_id = pl.id
+                    LEFT JOIN playlist_tags plt ON plt.playlist_id = pl.id
+                    LEFT JOIN tags t ON t.id = plt.tag_id
+                    WHERE
+                        pl.owner_id = $1
+                        AND ($2 = false OR pl.id > $3)
+                    GROUP BY pl.id
+                    ORDER BY pl.id ASC
+                    LIMIT $4
+                    "#,
+                user_id,
+                use_cursor,
+                last_id,
+                query_limit,
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            PlaylistSummary {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                cover: row.cover,
+                                item_count: row.item_count,
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                            },
+                            row.should_score as f64,
+                        )
+                    })
+                    .collect()
+            }),
+        }
         .map_err(|err| {
             log::error!("playlists.get_all db query failed: {err}");
             RepoError::StorageError
         })?;
 
-        let parsed_rows = rows
-            .into_iter()
-            .map(|row| {
-                (
-                    PlaylistSummary {
-                        id: row.id,
-                        title: row.title,
-                        description: row.description,
-                        cover: row.cover,
-                        item_count: row.item_count,
-                        tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                    },
-                    row.should_score as f64,
-                )
-            })
-            .collect();
-
-        Ok(Self::build_keyset_response(parsed_rows, limit))
+        Ok(Self::build_keyset_response(
+            parsed_rows,
+            limit,
+            direction,
+            use_cursor,
+        ))
     }
 }

@@ -1,10 +1,9 @@
 use crate::domain::model::{
-    Cursor, CursorID, File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem,
-    PlaylistItemID, Post, PostID, Tag, TagCategory, TagID,
+    File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID, Tag,
+    TagCategory, TagID,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
-use std::any::Any;
 use std::path::PathBuf;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;

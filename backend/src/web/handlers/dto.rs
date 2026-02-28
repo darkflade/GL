@@ -1,5 +1,6 @@
-use crate::domain::model::{PaginationMode, PostID, TagQuery};
+use crate::application::contracts::{KeysetDirection, PaginationMode};
 use serde::Deserialize;
+use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct CreatePostMeta {
@@ -16,15 +17,23 @@ pub struct SearchParams {
 #[derive(Deserialize)]
 pub struct SearchQueryParams {
     pub text_query: Option<String>,
-    pub tag_query: Option<TagQuery>,
+    pub tag_query: Option<TagQueryParams>,
     pub cursor: Option<SearchCursorParams>,
+}
+
+#[derive(Deserialize, Default, Clone, Debug)]
+pub struct TagQueryParams {
+    pub must: Vec<String>,
+    pub should: Vec<String>,
+    pub must_not: Vec<String>,
 }
 
 #[derive(Deserialize, Default, Clone)]
 pub struct SearchCursorParams {
     pub mode: Option<PaginationMode>,
     pub page: Option<i64>,
-    pub last_id: Option<PostID>,
+    pub last_id: Option<Uuid>,
     pub last_score: Option<f64>,
     pub limit: Option<i64>,
+    pub direction: Option<KeysetDirection>,
 }

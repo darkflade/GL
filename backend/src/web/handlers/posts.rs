@@ -1,11 +1,10 @@
-use crate::application::use_cases::services::Services;
-use crate::domain::files::FileStorage;
-use crate::domain::model::{
-    ByteStream, Cursor, KeysetCursor, NewTag, PaginationMode, StorageError, TagCategory, TagQuery,
-};
-use crate::domain::repository::{
+use crate::application::contracts::{Cursor, KeysetCursor, NewTag, PaginationMode};
+use crate::application::ports::{
     FileRepository, PlaylistRepository, PostRepository, TagRepository,
 };
+use crate::application::use_cases::services::Services;
+use crate::domain::files::FileStorage;
+use crate::domain::model::{ByteStream, StorageError, TagCategory};
 use crate::web::error::AppError;
 use crate::web::handlers::dto::{CreatePostMeta, SearchQueryParams};
 use crate::web::handlers::utils::{has_filters, map_repo_error, parse_uuid};
@@ -49,7 +48,7 @@ where
 
             let posts = services
                 .search_posts
-                .execute(tag_query, offset_cursor)
+                .execute(tag_query.clone().into(), offset_cursor)
                 .await
                 .map_err(|err| map_repo_error(err, "Posts not found", "posts.search"))?;
 
@@ -72,7 +71,7 @@ where
 
             let posts = services
                 .search_posts_keyset
-                .execute(tag_query, keyset_cursor)
+                .execute(tag_query.into(), keyset_cursor)
                 .await
                 .map_err(|err| map_repo_error(err, "Posts not found", "posts.search_keyset"))?;
 
@@ -203,4 +202,26 @@ where
         .map_err(|err| map_repo_error(err, "Post not found", "posts.get"))?;
 
     Ok(HttpResponse::Ok().json(post))
+}
+
+pub async fn delete_post<PR, PLR, TR, FR, FS>(
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError>
+where
+    PR: PostRepository + Clone,
+    PLR: PlaylistRepository + Clone,
+    TR: TagRepository + Clone,
+    FR: FileRepository + Clone,
+    FS: FileStorage + Clone,
+{
+    let id = parse_uuid(&path.into_inner(), "post id")?;
+
+    services
+        .delete_post
+        .execute(id)
+        .await
+        .map_err(|err| map_repo_error(err, "Post not found", "posts.delete"))?;
+
+    Ok(HttpResponse::NoContent().finish())
 }

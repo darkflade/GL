@@ -1,10 +1,11 @@
-use crate::application::helpers::file_type_determinator::file_type_from_mime_and_ext;
-use crate::domain::files::FileStorage;
-use crate::domain::model::{
-    ByteStream, Cursor, File, KeysetCursor, NewPost, NewTag, Post, PostID, RepoError,
-    SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
+use crate::application::contracts::{
+    Cursor, KeysetCursor, NewPost, NewTag, SearchPostsKeysetResponse, SearchPostsOffsetResponse,
+    TagQuery,
 };
-use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
+use crate::application::helpers::file_type_determinator::file_type_from_mime_and_ext;
+use crate::application::ports::{FileRepository, PostRepository, TagRepository};
+use crate::domain::files::FileStorage;
+use crate::domain::model::{ByteStream, File, Post, PostID, RepoError};
 use actix_web::mime::Mime;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -76,6 +77,10 @@ pub struct GetPostUseCase<PR> {
     pub repo: PR,
 }
 
+pub struct DeletePostUseCase<PR> {
+    pub repo: PR,
+}
+
 pub struct GetAllPostsUseCase<PR> {
     pub repo: PR,
 }
@@ -125,5 +130,11 @@ impl<PR: PostRepository> GetAllPostsKeysetUseCase<PR> {
 impl<PR: PostRepository> GetPostUseCase<PR> {
     pub async fn execute(&self, id: PostID) -> Result<Post, RepoError> {
         self.repo.get(id).await
+    }
+}
+
+impl<PR: PostRepository> DeletePostUseCase<PR> {
+    pub async fn execute(&self, id: PostID) -> Result<(), RepoError> {
+        self.repo.delete(id).await
     }
 }

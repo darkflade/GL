@@ -1,8 +1,9 @@
-use crate::domain::model::{
-    Cursor, KeysetCursor, NewPost, NextKeysetCursor, PaginationMode, Post, PostID, RepoError,
-    SearchPostsKeysetResponse, SearchPostsOffsetResponse, Tag, TagID, TagQuery,
+use crate::application::contracts::{
+    Cursor, KeysetCursor, KeysetDirection, KeysetPageCursor, NewPost, PaginationMode,
+    SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
 };
-use crate::domain::repository::PostRepository;
+use crate::application::ports::PostRepository;
+use crate::domain::model::{Post, PostID, RepoError, Tag, TagID};
 use crate::storage::postgres::dto::{FileResponse, TagResponse};
 use async_trait::async_trait;
 use sqlx::PgPool;
@@ -26,15 +27,46 @@ impl PostgresPostRepository {
     fn build_keyset_response(
         mut entries: Vec<(Post, f64)>,
         limit: i64,
+        direction: KeysetDirection,
+        use_cursor: bool,
     ) -> SearchPostsKeysetResponse {
-        let has_next = entries.len() as i64 > limit;
-        if has_next {
+        let has_more_in_direction = entries.len() as i64 > limit;
+        if has_more_in_direction {
             entries.truncate(limit as usize);
         }
 
+        if matches!(direction, KeysetDirection::Prev) {
+            entries.reverse();
+        }
+
+        let has_next = if matches!(direction, KeysetDirection::Next) {
+            has_more_in_direction
+        } else {
+            use_cursor
+        };
+
+        let has_prev = if matches!(direction, KeysetDirection::Prev) {
+            has_more_in_direction
+        } else {
+            use_cursor
+        };
+
         let next_cursor = if has_next {
-            entries.last().map(|(post, score)| NextKeysetCursor {
+            entries.last().map(|(post, score)| KeysetPageCursor {
                 mode: PaginationMode::Keyset,
+                direction: KeysetDirection::Next,
+                last_id: post.id,
+                last_score: *score,
+                limit,
+            })
+        } else {
+            None
+        };
+
+        let prev_cursor = if has_prev {
+            entries.first().map(|(post, score)| KeysetPageCursor {
+                mode: PaginationMode::Keyset,
+                direction: KeysetDirection::Prev,
                 last_id: post.id,
                 last_score: *score,
                 limit,
@@ -48,7 +80,9 @@ impl PostgresPostRepository {
         SearchPostsKeysetResponse {
             posts,
             has_next,
+            has_prev,
             next_cursor,
+            prev_cursor,
         }
     }
 
@@ -70,6 +104,7 @@ impl PostgresPostRepository {
 
 #[async_trait]
 impl PostRepository for PostgresPostRepository {
+    // Todo
     async fn create(&self, post: NewPost, tag_ids: &[TagID]) -> Result<PostID, RepoError> {
         let mut tx = self.pool.begin().await.map_err(|err| {
             log::error!("posts.create failed to begin transaction: {err}");
@@ -175,6 +210,27 @@ impl PostRepository for PostgresPostRepository {
             //TODO load notes
             notes: vec![],
         })
+    }
+
+    async fn update(&self, id: PostID, update_post: Post) -> Result<(), RepoError> {
+        log::debug!("update post {}, {}", id, update_post.title);
+        Ok(())
+    }
+
+    async fn delete(&self, id: PostID) -> Result<(), RepoError> {
+        let result = sqlx::query!("DELETE FROM posts WHERE id = $1", id)
+            .execute(&self.pool)
+            .await
+            .map_err(|err| {
+                log::error!("posts.delete failed for {}: {err}", id);
+                RepoError::StorageError
+            })?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepoError::NotFound);
+        }
+
+        Ok(())
     }
 
     async fn search(
@@ -359,108 +415,214 @@ impl PostRepository for PostgresPostRepository {
         let limit = Self::resolve_keyset_limit(&cursor);
         let query_limit = limit + 1;
         let use_cursor = cursor.last_id.is_some() && cursor.last_score.is_some();
+        let requested_direction = cursor.direction.unwrap_or_default();
+        let direction = if use_cursor {
+            requested_direction
+        } else {
+            KeysetDirection::Next
+        };
         let last_id = cursor.last_id.unwrap_or(Uuid::nil());
         let last_score = cursor.last_score.unwrap_or(f64::MAX);
 
-        let rows = sqlx::query!(
-            r#"
-            WITH ranked_posts AS (
-                SELECT
-                    p.id,
-                    p.title,
-                    p.description,
-                    COALESCE(
-                        jsonb_agg(
-                            jsonb_build_object(
-                                'id', pt.tag_id,
-                                'name', t.name,
-                                'category', t.category,
-                                'count', t.post_count
+        let parsed_rows: Vec<(Post, f64)> = match direction {
+            KeysetDirection::Next => sqlx::query!(
+                r#"
+                    WITH ranked_posts AS (
+                        SELECT
+                            p.id,
+                            p.title,
+                            p.description,
+                            COALESCE(
+                                jsonb_agg(
+                                    jsonb_build_object(
+                                        'id', pt.tag_id,
+                                        'name', t.name,
+                                        'category', t.category,
+                                        'count', t.post_count
+                                    )
+                                ) FILTER (WHERE pt.tag_id IS NOT NULL),
+                                '[]'::jsonb
+                            ) AS tags,
+                            (
+                                SELECT jsonb_build_object(
+                                    'id', f.id,
+                                    'path', f.path,
+                                    'hash', f.hash,
+                                    'media_type', f.media_type,
+                                    'meta', f.meta,
+                                    'created_at', f.created_at
+                                )
+                                FROM files f
+                                WHERE f.id = p.file_id
+                            ) AS file,
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($1) THEN t.name
+                            END)::bigint AS should_score
+                        FROM posts p
+                        LEFT JOIN post_tags pt ON pt.post_id = p.id
+                        LEFT JOIN tags t ON t.id = pt.tag_id
+                        LEFT JOIN files f ON f.id = p.file_id
+                        GROUP BY p.id
+                        HAVING
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($2) THEN t.name
+                            END) = cardinality($2)
+                            AND
+                            NOT EXISTS (
+                                SELECT 1
+                                FROM post_tags x
+                                JOIN tags tx ON tx.id = x.tag_id
+                                WHERE x.post_id = p.id
+                                  AND tx.name = ANY($3)
                             )
-                        ) FILTER (WHERE pt.tag_id IS NOT NULL),
-                        '[]'::jsonb
-                    ) AS tags,
-                    (
-                        SELECT jsonb_build_object(
-                            'id', f.id,
-                            'path', f.path,
-                            'hash', f.hash,
-                            'media_type', f.media_type,
-                            'meta', f.meta,
-                            'created_at', f.created_at
-                        )
-                        FROM files f
-                        WHERE f.id = p.file_id
-                    ) AS file,
-                    COUNT(DISTINCT CASE
-                        WHEN t.name = ANY($1) THEN t.name
-                    END)::bigint AS should_score
-                FROM posts p
-                LEFT JOIN post_tags pt ON pt.post_id = p.id
-                LEFT JOIN tags t ON t.id = pt.tag_id
-                LEFT JOIN files f ON f.id = p.file_id
-                GROUP BY p.id
-                HAVING
-                    COUNT(DISTINCT CASE
-                        WHEN t.name = ANY($2) THEN t.name
-                    END) = cardinality($2)
-                    AND
-                    NOT EXISTS (
-                        SELECT 1
-                        FROM post_tags x
-                        JOIN tags tx ON tx.id = x.tag_id
-                        WHERE x.post_id = p.id
-                          AND tx.name = ANY($3)
                     )
+                    SELECT
+                        id,
+                        title,
+                        description,
+                        tags AS "tags!: Json<Vec<TagResponse>>",
+                        file AS "file!: Json<FileResponse>",
+                        should_score AS "should_score!: i64"
+                    FROM ranked_posts
+                    WHERE
+                        $4 = false
+                        OR should_score::double precision < $5
+                        OR (should_score::double precision = $5 AND id < $6)
+                    ORDER BY should_score DESC, id DESC
+                    LIMIT $7
+                    "#,
+                &query.should[..],
+                &query.must[..],
+                &query.must_not[..],
+                use_cursor,
+                last_score,
+                last_id,
+                query_limit
             )
-            SELECT
-                id,
-                title,
-                description,
-                tags AS "tags!: Json<Vec<TagResponse>>",
-                file AS "file!: Json<FileResponse>",
-                should_score AS "should_score!: i64"
-            FROM ranked_posts
-            WHERE
-                $4 = false
-                OR should_score::double precision < $5
-                OR (should_score::double precision = $5 AND id < $6)
-            ORDER BY should_score DESC, id DESC
-            LIMIT $7
-            "#,
-            &query.should[..],
-            &query.must[..],
-            &query.must_not[..],
-            use_cursor,
-            last_score,
-            last_id,
-            query_limit
-        )
-        .fetch_all(&self.pool)
-        .await
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            Post {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                file: row.file.0.into(),
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                notes: vec![],
+                            },
+                            row.should_score as f64,
+                        )
+                    })
+                    .collect()
+            }),
+            KeysetDirection::Prev => sqlx::query!(
+                r#"
+                    WITH ranked_posts AS (
+                        SELECT
+                            p.id,
+                            p.title,
+                            p.description,
+                            COALESCE(
+                                jsonb_agg(
+                                    jsonb_build_object(
+                                        'id', pt.tag_id,
+                                        'name', t.name,
+                                        'category', t.category,
+                                        'count', t.post_count
+                                    )
+                                ) FILTER (WHERE pt.tag_id IS NOT NULL),
+                                '[]'::jsonb
+                            ) AS tags,
+                            (
+                                SELECT jsonb_build_object(
+                                    'id', f.id,
+                                    'path', f.path,
+                                    'hash', f.hash,
+                                    'media_type', f.media_type,
+                                    'meta', f.meta,
+                                    'created_at', f.created_at
+                                )
+                                FROM files f
+                                WHERE f.id = p.file_id
+                            ) AS file,
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($1) THEN t.name
+                            END)::bigint AS should_score
+                        FROM posts p
+                        LEFT JOIN post_tags pt ON pt.post_id = p.id
+                        LEFT JOIN tags t ON t.id = pt.tag_id
+                        LEFT JOIN files f ON f.id = p.file_id
+                        GROUP BY p.id
+                        HAVING
+                            COUNT(DISTINCT CASE
+                                WHEN t.name = ANY($2) THEN t.name
+                            END) = cardinality($2)
+                            AND
+                            NOT EXISTS (
+                                SELECT 1
+                                FROM post_tags x
+                                JOIN tags tx ON tx.id = x.tag_id
+                                WHERE x.post_id = p.id
+                                  AND tx.name = ANY($3)
+                            )
+                    )
+                    SELECT
+                        id,
+                        title,
+                        description,
+                        tags AS "tags!: Json<Vec<TagResponse>>",
+                        file AS "file!: Json<FileResponse>",
+                        should_score AS "should_score!: i64"
+                    FROM ranked_posts
+                    WHERE
+                        $4 = false
+                        OR should_score::double precision > $5
+                        OR (should_score::double precision = $5 AND id > $6)
+                    ORDER BY should_score ASC, id ASC
+                    LIMIT $7
+                    "#,
+                &query.should[..],
+                &query.must[..],
+                &query.must_not[..],
+                use_cursor,
+                last_score,
+                last_id,
+                query_limit
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            Post {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                file: row.file.0.into(),
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                notes: vec![],
+                            },
+                            row.should_score as f64,
+                        )
+                    })
+                    .collect()
+            }),
+        }
         .map_err(|err| {
             log::error!("posts.search_keyset db query failed: {err}");
             RepoError::StorageError
         })?;
 
-        let parsed_rows = rows
-            .into_iter()
-            .map(|row| {
-                (
-                    Post {
-                        id: row.id,
-                        title: row.title,
-                        description: row.description,
-                        file: row.file.0.into(),
-                        tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                        notes: vec![],
-                    },
-                    row.should_score as f64,
-                )
-            })
-            .collect();
-
-        Ok(Self::build_keyset_response(parsed_rows, limit))
+        Ok(Self::build_keyset_response(
+            parsed_rows,
+            limit,
+            direction,
+            use_cursor,
+        ))
     }
 
     async fn get_all_keyset(
@@ -470,75 +632,150 @@ impl PostRepository for PostgresPostRepository {
         let limit = Self::resolve_keyset_limit(&cursor);
         let query_limit = limit + 1;
         let use_cursor = cursor.last_id.is_some();
+        let requested_direction = cursor.direction.unwrap_or_default();
+        let direction = if use_cursor {
+            requested_direction
+        } else {
+            KeysetDirection::Next
+        };
         let last_id = cursor.last_id.unwrap_or(Uuid::nil());
 
-        let rows = sqlx::query!(
-            r#"
-            SELECT
-                p.id,
-                p.title,
-                p.description,
-                COALESCE(
-                    jsonb_agg(
-                        jsonb_build_object(
-                            'id', pt.tag_id,
-                            'name', t.name,
-                            'category', t.category,
-                            'count', t.post_count
+        let parsed_rows: Vec<(Post, f64)> = match direction {
+            KeysetDirection::Next => sqlx::query!(
+                r#"
+                    SELECT
+                        p.id,
+                        p.title,
+                        p.description,
+                        COALESCE(
+                            jsonb_agg(
+                                jsonb_build_object(
+                                    'id', pt.tag_id,
+                                    'name', t.name,
+                                    'category', t.category,
+                                    'count', t.post_count
+                                )
+                            ) FILTER (WHERE pt.tag_id IS NOT NULL),
+                            '[]'::jsonb
+                        ) AS "tags!: Json<Vec<TagResponse>>",
+                        (
+                            SELECT jsonb_build_object(
+                                'id', f.id,
+                                'path', f.path,
+                                'hash', f.hash,
+                                'media_type', f.media_type,
+                                'meta', f.meta,
+                                'created_at', f.created_at
+                            )
+                            FROM files f
+                            WHERE f.id = p.file_id
+                        ) AS "file!: Json<FileResponse>",
+                        0::bigint AS "should_score!: i64"
+                    FROM posts p
+                    LEFT JOIN post_tags pt ON pt.post_id = p.id
+                    LEFT JOIN tags t ON t.id = pt.tag_id
+                    LEFT JOIN files f ON f.id = p.file_id
+                    WHERE $1 = false OR p.id < $2
+                    GROUP BY p.id
+                    ORDER BY p.id DESC
+                    LIMIT $3
+                    "#,
+                use_cursor,
+                last_id,
+                query_limit,
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            Post {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                file: row.file.0.into(),
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                notes: vec![],
+                            },
+                            row.should_score as f64,
                         )
-                    ) FILTER (WHERE pt.tag_id IS NOT NULL),
-                    '[]'::jsonb
-                ) AS "tags!: Json<Vec<TagResponse>>",
-                (
-                    SELECT jsonb_build_object(
-                        'id', f.id,
-                        'path', f.path,
-                        'hash', f.hash,
-                        'media_type', f.media_type,
-                        'meta', f.meta,
-                        'created_at', f.created_at
-                    )
-                    FROM files f
-                    WHERE f.id = p.file_id
-                ) AS "file!: Json<FileResponse>",
-                0::bigint AS "should_score!: i64"
-            FROM posts p
-            LEFT JOIN post_tags pt ON pt.post_id = p.id
-            LEFT JOIN tags t ON t.id = pt.tag_id
-            LEFT JOIN files f ON f.id = p.file_id
-            WHERE $1 = false OR p.id < $2
-            GROUP BY p.id
-            ORDER BY p.id DESC
-            LIMIT $3
-            "#,
-            use_cursor,
-            last_id,
-            query_limit,
-        )
-        .fetch_all(&self.pool)
-        .await
+                    })
+                    .collect()
+            }),
+            KeysetDirection::Prev => sqlx::query!(
+                r#"
+                    SELECT
+                        p.id,
+                        p.title,
+                        p.description,
+                        COALESCE(
+                            jsonb_agg(
+                                jsonb_build_object(
+                                    'id', pt.tag_id,
+                                    'name', t.name,
+                                    'category', t.category,
+                                    'count', t.post_count
+                                )
+                            ) FILTER (WHERE pt.tag_id IS NOT NULL),
+                            '[]'::jsonb
+                        ) AS "tags!: Json<Vec<TagResponse>>",
+                        (
+                            SELECT jsonb_build_object(
+                                'id', f.id,
+                                'path', f.path,
+                                'hash', f.hash,
+                                'media_type', f.media_type,
+                                'meta', f.meta,
+                                'created_at', f.created_at
+                            )
+                            FROM files f
+                            WHERE f.id = p.file_id
+                        ) AS "file!: Json<FileResponse>",
+                        0::bigint AS "should_score!: i64"
+                    FROM posts p
+                    LEFT JOIN post_tags pt ON pt.post_id = p.id
+                    LEFT JOIN tags t ON t.id = pt.tag_id
+                    LEFT JOIN files f ON f.id = p.file_id
+                    WHERE $1 = false OR p.id > $2
+                    GROUP BY p.id
+                    ORDER BY p.id ASC
+                    LIMIT $3
+                    "#,
+                use_cursor,
+                last_id,
+                query_limit,
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        (
+                            Post {
+                                id: row.id,
+                                title: row.title,
+                                description: row.description,
+                                file: row.file.0.into(),
+                                tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                notes: vec![],
+                            },
+                            row.should_score as f64,
+                        )
+                    })
+                    .collect()
+            }),
+        }
         .map_err(|err| {
             log::error!("posts.get_all_keyset db query failed: {err}");
             RepoError::StorageError
         })?;
 
-        let parsed_rows = rows
-            .into_iter()
-            .map(|row| {
-                (
-                    Post {
-                        id: row.id,
-                        title: row.title,
-                        description: row.description,
-                        file: row.file.0.into(),
-                        tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                        notes: vec![],
-                    },
-                    row.should_score as f64,
-                )
-            })
-            .collect();
-
-        Ok(Self::build_keyset_response(parsed_rows, limit))
+        Ok(Self::build_keyset_response(
+            parsed_rows,
+            limit,
+            direction,
+            use_cursor,
+        ))
     }
 }

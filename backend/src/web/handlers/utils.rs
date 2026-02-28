@@ -1,9 +1,10 @@
-use crate::domain::model::{Cursor, KeysetCursor, PaginationMode, RepoError, TagQuery};
+use crate::application::contracts::{Cursor, KeysetCursor, PaginationMode, TagQuery};
+use crate::domain::model::RepoError;
 use crate::web::error::AppError;
-use crate::web::handlers::dto::{SearchCursorParams, SearchQueryParams};
+use crate::web::handlers::dto::{SearchCursorParams, TagQueryParams};
 use uuid::Uuid;
 
-pub fn has_filters(tag_query: &TagQuery) -> bool {
+pub fn has_filters(tag_query: &TagQueryParams) -> bool {
     !(tag_query.must.is_empty() && tag_query.should.is_empty() && tag_query.must_not.is_empty())
 }
 
@@ -28,6 +29,7 @@ impl From<SearchCursorParams> for KeysetCursor {
             last_id: cursor.last_id,
             last_score: cursor.last_score,
             limit: cursor.limit,
+            direction: cursor.direction,
         }
     }
 }
@@ -37,6 +39,16 @@ impl From<SearchCursorParams> for Cursor {
         Self {
             //Zero here
             page: cursor.page.unwrap_or_default(),
+        }
+    }
+}
+
+impl From<TagQueryParams> for TagQuery {
+    fn from(query: TagQueryParams) -> Self {
+        Self {
+            must: query.must,
+            should: query.should,
+            must_not: query.must_not,
         }
     }
 }

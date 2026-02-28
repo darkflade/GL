@@ -1,13 +1,12 @@
+use crate::application::ports::FileRepository;
 use crate::domain::model::File;
 use crate::domain::model::FileID;
 use crate::domain::model::RepoError;
-use crate::domain::repository::FileRepository;
 use crate::storage::postgres::dto::FileMetaResponse;
 use crate::storage::postgres::dto::FileResponse;
 use async_trait::async_trait;
 use sqlx::PgPool;
 use sqlx::types::Json;
-use sqlx::types::time::OffsetDateTime;
 
 #[derive(Clone)]
 pub struct PostgresFileRepository {

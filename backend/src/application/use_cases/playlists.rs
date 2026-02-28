@@ -1,7 +1,6 @@
-use crate::domain::model::{
-    KeysetCursor, Playlist, PlaylistID, PlaylistQuery, RepoError, SearchPlaylistsResponse, UserID,
-};
-use crate::domain::repository::PlaylistRepository;
+use crate::application::contracts::{KeysetCursor, PlaylistQuery, SearchPlaylistsResponse};
+use crate::application::ports::PlaylistRepository;
+use crate::domain::model::{Playlist, PlaylistID, RepoError, UserID};
 
 // Playlist Use-Case
 
@@ -20,6 +19,10 @@ impl<PLR: PlaylistRepository> GetPlaylistUseCase<PLR> {
 }
 
 pub struct SearchPlaylistsUseCase<PLR> {
+    pub repo: PLR,
+}
+
+pub struct DeletePlaylistUseCase<PLR> {
     pub repo: PLR,
 }
 
@@ -45,5 +48,11 @@ impl<PLR: PlaylistRepository> GetAllPlaylistsUseCase<PLR> {
         cursor: KeysetCursor,
     ) -> Result<SearchPlaylistsResponse, RepoError> {
         self.repo.get_all(user_id, cursor).await
+    }
+}
+
+impl<PLR: PlaylistRepository> DeletePlaylistUseCase<PLR> {
+    pub async fn execute(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<(), RepoError> {
+        self.repo.delete(user_id, playlist_id).await
     }
 }

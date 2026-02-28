@@ -1,5 +1,6 @@
-use crate::domain::model::{NewUser, RepoError, User};
-use crate::domain::repository::UserRepository;
+use crate::application::contracts::NewUser;
+use crate::application::ports::UserRepository;
+use crate::domain::model::{RepoError, User};
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;

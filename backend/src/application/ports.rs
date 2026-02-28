@@ -1,7 +1,9 @@
+use crate::application::contracts::{
+    Cursor, KeysetCursor, NewPost, NewTag, NewUser, PlaylistQuery, SearchPlaylistsResponse,
+    SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
+};
 use crate::domain::model::{
-    Cursor, File, FileID, KeysetCursor, NewPost, NewTag, NewUser, Playlist, PlaylistID,
-    PlaylistQuery, Post, PostID, RepoError, SearchPlaylistsResponse, SearchPostsKeysetResponse,
-    SearchPostsOffsetResponse, Tag, TagID, TagQuery, User, UserID,
+    File, FileID, Playlist, PlaylistID, Post, PostID, RepoError, Tag, TagID, User, UserID,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -10,14 +12,14 @@ use uuid::Uuid;
 pub trait PostRepository: Send + Sync {
     async fn create(&self, post: NewPost, tag_ids: &[TagID]) -> Result<PostID, RepoError>;
     async fn get(&self, id: PostID) -> Result<Post, RepoError>;
-    //Offset search
+    async fn update(&self, id: PostID, update_post: Post) -> Result<(), RepoError>;
+    async fn delete(&self, id: PostID) -> Result<(), RepoError>;
     async fn search(
         &self,
         query: TagQuery,
         cursor: Cursor,
     ) -> Result<SearchPostsOffsetResponse, RepoError>;
     async fn get_all(&self, cursor: Cursor) -> Result<SearchPostsOffsetResponse, RepoError>;
-    //Keyset search
     async fn search_keyset(
         &self,
         query: TagQuery,
@@ -32,15 +34,19 @@ pub trait PostRepository: Send + Sync {
 #[async_trait]
 pub trait PlaylistRepository: Send + Sync {
     async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError>;
-
-    //Only keyset search in playlists
+    async fn update(
+        &self,
+        user_id: UserID,
+        id: PlaylistID,
+        update_playlist: Playlist,
+    ) -> Result<(), RepoError>;
+    async fn delete(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<(), RepoError>;
     async fn search(
         &self,
         user_id: UserID,
         query: PlaylistQuery,
         cursor: KeysetCursor,
     ) -> Result<SearchPlaylistsResponse, RepoError>;
-
     async fn get_all(
         &self,
         user_id: UserID,
@@ -51,7 +57,6 @@ pub trait PlaylistRepository: Send + Sync {
 #[async_trait]
 pub trait TagRepository: Send + Sync {
     async fn get_or_create(&self, tag: Vec<NewTag>) -> Result<Vec<Tag>, RepoError>;
-
     async fn search(&self, query: &str, limit: i64) -> Result<Vec<Tag>, RepoError>;
 }
 

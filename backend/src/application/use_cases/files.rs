@@ -1,5 +1,5 @@
+use crate::application::ports::FileRepository;
 use crate::domain::model::{File, FileID, RepoError};
-use crate::domain::repository::FileRepository;
 
 // File Use-Case
 pub struct GetFileUseCase<FR> {

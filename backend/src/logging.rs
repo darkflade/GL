@@ -4,11 +4,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 fn level_badge(level: Level) -> String {
     match level {
-        Level::Error => " ERROR ".white().on_red().bold().to_string(),
-        Level::Warn => " WARN  ".black().on_yellow().bold().to_string(),
-        Level::Info => " INFO  ".black().on_green().bold().to_string(),
-        Level::Debug => " DEBUG ".white().on_blue().bold().to_string(),
-        Level::Trace => " TRACE ".white().on_magenta().bold().to_string(),
+        Level::Error => " [ERROR] ".white().on_red().bold().to_string(),
+        Level::Warn => " [WARN]  ".black().on_yellow().bold().to_string(),
+        Level::Info => " [INFO]  ".black().on_green().bold().to_string(),
+        Level::Debug => "[DEBUG] ".white().on_blue().bold().to_string(),
+        Level::Trace => "[TRACE] ".white().on_magenta().bold().to_string(),
     }
 }
 

@@ -1,5 +1,6 @@
-use crate::domain::model::{NewTag, RepoError, Tag};
-use crate::domain::repository::TagRepository;
+use crate::application::contracts::NewTag;
+use crate::application::ports::TagRepository;
+use crate::domain::model::{RepoError, Tag};
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;

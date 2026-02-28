@@ -9,7 +9,6 @@ use uuid::Uuid;
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, StorageError>> + Send>>;
 
 pub type FileID = Uuid;
-pub type CursorID = Uuid;
 pub type PostID = Uuid;
 pub type NoteID = Uuid;
 pub type TagID = Uuid;
@@ -183,49 +182,6 @@ pub struct User {
     pub password_hash: String,
 }
 
-// Classes for request
-#[derive(Clone, Serialize, Deserialize)]
-pub struct NewTag {
-    pub category: TagCategory,
-    pub value: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct NewPost {
-    pub id: PostID,
-    pub title: String,
-    pub file_id: FileID,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct NewUser {
-    pub username: String,
-    pub password_hash: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct TagQuery {
-    pub must: Vec<String>,
-    pub should: Vec<String>,
-    pub must_not: Vec<String>,
-}
-
-impl Default for TagQuery {
-    fn default() -> Self {
-        Self {
-            must: vec![],
-            should: vec![],
-            must_not: vec![],
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct PlaylistQuery {
-    pub tags: TagQuery,
-    pub text: String,
-}
-
 // Errors
 #[derive(Debug)]
 pub enum RepoError {
@@ -237,69 +193,4 @@ pub enum StorageError {
     NotFound,
     StorageError,
     Io,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Cursor {
-    pub page: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum PaginationMode {
-    Offset,
-    Keyset,
-}
-
-impl Default for PaginationMode {
-    fn default() -> Self {
-        PaginationMode::Keyset
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Default)]
-pub struct KeysetCursor {
-    pub mode: Option<PaginationMode>,
-    pub last_id: Option<Uuid>,
-    pub last_score: Option<f64>,
-    pub limit: Option<i64>,
-}
-
-//TODO Return previous cursor also
-#[derive(Clone, Serialize, Deserialize)]
-pub struct NextKeysetCursor {
-    pub mode: PaginationMode,
-    pub last_id: Uuid,
-    pub last_score: f64,
-    pub limit: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SearchPostsOffsetResponse {
-    pub posts: Vec<Post>,
-    pub total_pages: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SearchPostsKeysetResponse {
-    pub posts: Vec<Post>,
-    pub has_next: bool,
-    pub next_cursor: Option<NextKeysetCursor>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SearchPlaylistsResponse {
-    pub playlists: Vec<PlaylistSummary>,
-    pub has_next: bool,
-    pub next_cursor: Option<NextKeysetCursor>,
-}
-
-impl Default for SearchPlaylistsResponse {
-    fn default() -> Self {
-        Self {
-            playlists: vec![],
-            has_next: false,
-            next_cursor: None,
-        }
-    }
 }
