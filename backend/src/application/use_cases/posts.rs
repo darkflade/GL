@@ -3,7 +3,7 @@ use actix_web::mime::Mime;
 use uuid::Uuid;
 use crate::application::helpers::file_type_determinator::file_type_from_mime_and_ext;
 use crate::domain::files::FileStorage;
-use crate::domain::model::{ByteStream, Cursor, File, NewPost, NewTag, Post, PostID, RepoError, SearchPostsResponse, TagQuery};
+use crate::domain::model::{ByteStream, Cursor, File, KeysetCursor, NewPost, NewTag, Post, PostID, RepoError, SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery};
 use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
 
 // Post Use-Case
@@ -78,14 +78,34 @@ pub struct GetAllPostsUseCase<PR> {
     pub repo: PR,
 }
 
+pub struct SearchPostsKeysetUseCase<PR> {
+    pub repo: PR,
+}
+
+pub struct GetAllPostsKeysetUseCase<PR> {
+    pub repo: PR,
+}
+
 impl<PR: PostRepository> SearchPostsUseCase<PR> {
-    pub async fn execute(&self, query: TagQuery, cursor: Cursor) -> Result<SearchPostsResponse, RepoError> {
+    pub async fn execute(&self, query: TagQuery, cursor: Cursor) -> Result<SearchPostsOffsetResponse, RepoError> {
         self.repo.search(query, cursor).await
     }
 }
 impl<PR: PostRepository> GetAllPostsUseCase<PR> {
-    pub async fn execute(&self, cursor: Cursor) -> Result<SearchPostsResponse, RepoError> {
+    pub async fn execute(&self, cursor: Cursor) -> Result<SearchPostsOffsetResponse, RepoError> {
         self.repo.get_all(cursor).await
+    }
+}
+
+impl<PR: PostRepository> SearchPostsKeysetUseCase<PR> {
+    pub async fn execute(&self, query: TagQuery, cursor: KeysetCursor) -> Result<SearchPostsKeysetResponse, RepoError> {
+        self.repo.search_keyset(query, cursor).await
+    }
+}
+
+impl<PR: PostRepository> GetAllPostsKeysetUseCase<PR> {
+    pub async fn execute(&self, cursor: KeysetCursor) -> Result<SearchPostsKeysetResponse, RepoError> {
+        self.repo.get_all_keyset(cursor).await
     }
 }
 

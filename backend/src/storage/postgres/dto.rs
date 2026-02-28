@@ -69,14 +69,6 @@ impl From<FileMetaResponse> for FileMeta {
     }
 }
 
-pub struct PostResponse {
-    pub id: PostID,
-    pub title: String,
-    pub file_id: FileID,
-    pub description: Option<String>,
-    pub tag_ids: Vec<TagID>
-}
-
 #[derive(Debug, Deserialize)]
 pub struct TagResponse {
     pub id: TagID,
@@ -114,16 +106,6 @@ impl From<TagCategoryResponse> for TagCategory {
         }
     }
 }
-
-/*
-#[derive(Clone, Serialize, Deserialize)]
-pub struct FileMeta {
-    pub width: Option<u32>,
-    pub height: Option<u32>,
-    pub duration_ms: Option<u64>,
-}
-
- */
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlaylistItemResponse {

@@ -26,7 +26,4 @@
         border-radius: 8px;
         margin: -.5rem -1rem .5rem -1rem;
     }
-    a {
-        color: white;
-    }
 </style>

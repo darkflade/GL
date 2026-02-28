@@ -212,21 +212,10 @@ pub struct TagQuery {
     pub must_not: Vec<String>,
 }
 
-impl Default for TagQuery {
-    fn default() -> Self {
-        Self{
-            must:       vec![],
-            should:     vec![],
-            must_not:   vec![],
-
-        }
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PlaylistQuery {
     pub tags: Option<TagQuery>,
-    pub name: Option<String>,
+    pub text: Option<String>,
 }
 
 // Errors
@@ -247,14 +236,46 @@ pub struct Cursor{
     pub page: i64,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum PaginationMode {
+    Offset,
+    Keyset,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+pub struct KeysetCursor {
+    pub mode: Option<PaginationMode>,
+    pub last_id: Option<PostID>,
+    pub last_score: Option<f64>,
+    pub limit: Option<i64>,
+}
+
+//TODO Return previous cursor also
 #[derive(Clone, Serialize, Deserialize)]
-pub struct SearchPostsResponse {
+pub struct NextKeysetCursor {
+    pub mode: PaginationMode,
+    pub last_id: PostID,
+    pub last_score: f64,
+    pub limit: i64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SearchPostsOffsetResponse {
     pub posts: Vec<Post>,
     pub total_pages: i64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct SearchPostsKeysetResponse {
+    pub posts: Vec<Post>,
+    pub has_next: bool,
+    pub next_cursor: Option<NextKeysetCursor>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SearchPlaylistsResponse {
     pub playlists: Vec<PlaylistSummary>,
-    pub total_pages: i64,
+    pub has_next: bool,
+    pub next_cursor: Option<NextKeysetCursor>,
 }

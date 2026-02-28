@@ -16,16 +16,16 @@ use crate::web::handlers::users::{get_current_user, login_user, logout_user, reg
 
 pub async fn run_web_server<
     PR,
+    PLR,
     TR,
     FR,
-    PLR,
     UR,
     FS,
 >(
     post_repo: PR,
+    playlist_repo: PLR,
     tag_repo: TR,
     file_repo: FR,
-    playlist_repo: PLR,
     user_repo: UR,
     file_storage: FS,
     ip_address: String,
@@ -34,14 +34,15 @@ pub async fn run_web_server<
 ) -> std::io::Result<()>
 where
     PR:     PostRepository      + Clone + Send + Sync + 'static,
+    PLR:    PlaylistRepository  + Clone + Send + Sync + 'static,
     TR:     TagRepository       + Clone + Send + Sync + 'static,
     FR:     FileRepository      + Clone + Send + Sync + 'static,
-    PLR:    PlaylistRepository  + Clone + Send + Sync + 'static,
     UR:     UserRepository      + Clone + Send + Sync + 'static,
     FS:     FileStorage         + Clone + Send + Sync + 'static,
 {
     let services = Services::new(
         post_repo,
+        playlist_repo,
         tag_repo,
         file_repo,
         file_storage,
@@ -49,8 +50,6 @@ where
 
     let services_data = Data::new(services);
 
-
-    let playlist_data = Data::new(playlist_repo);
     let user_data = Data::new(user_repo);
     
     let apply_key = Key::derive_from(secret_key.as_bytes());
@@ -66,7 +65,6 @@ where
                 apply_key.clone()
             ))
             .app_data(services_data.clone())
-            .app_data(playlist_data.clone())
             .app_data(user_data.clone())
             .service(
                 web::scope("/api")
@@ -81,28 +79,29 @@ where
 
                     .service(
                         web::scope("/playlists")
-                            .route("", web::get().to(get_my_playlists::<PLR>))
-                            .route("", web::post().to(create_playlist))
-                            .route("/{id}", web::get().to(get_playlist_details))
-                            .route("/{id}", web::delete().to(delete_playlist))
+                            .route("", web::get().to(get_my_playlists::<PR, PLR, TR, FR, FS>))
+                            .route("", web::post().to(create_playlist::<PR, PLR, TR, FR, FS>))
+                            .route("/{id}", web::get().to(get_playlist_details::<PR, PLR, TR, FR, FS>))
+                            .route("/{id}", web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>))
                     )
 
                     .service(
                         web::scope("/posts")
-                            .route("", web::post().to(create_post::<PR, TR, FR, FS>))
-                            .route("/search", web::post().to(search_posts::<PR, TR, FR, FS>))
-                            .route("/{id}", web::get().to(get_post::<PR, TR, FR, FS>))
+                            .route("", web::post().to(create_post::<PR, PLR, TR, FR, FS>))
+                            .route("/search", web::post().to(search_posts::<PR, PLR, TR, FR, FS>))
+                            .route("/{id}", web::get().to(get_post::<PR, PLR, TR, FR, FS>))
+                            .route("/{id}", web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>))
                     )
 
                     .service(
                         web::scope("/tags")
-                        .route("/search", web::get().to(search_tags::<PR, TR, FR, FS>))
+                        .route("/search", web::get().to(search_tags::<PR, PLR, TR, FR, FS>))
                         //TODO register get or create or delete it 
                     )
 
                     .service(
                         web::scope("/files")
-                            .route("/{id}",web::get().to(download_file::<PR, TR, FR, FS>))
+                            .route("/{id}",web::get().to(download_file::<PR, PLR, TR, FR, FS>))
                     )
             )
     })

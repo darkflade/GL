@@ -1,4 +1,4 @@
-import type {SearchPostsQuery} from "$lib/domain";
+import type { SearchPostsQuery } from "$lib/domain";
 
 export function serializeQuery(query: SearchPostsQuery): string {
     const params = new URLSearchParams();
@@ -14,8 +14,28 @@ export function serializeQuery(query: SearchPostsQuery): string {
         }
     }
 
-    if (query.cursor?.page && query.cursor.page > 0) {
-        params.set("page", String(query.cursor.page));
+    if (query.text_query) {
+        params.set("q", query.text_query);
+    }
+
+    params.set("mode", query.cursor.mode);
+    if (query.cursor.mode === "offset") {
+        if (query.cursor.page > 0) {
+            params.set("page", String(query.cursor.page));
+        }
+        if (query.cursor.page_size !== undefined) {
+            params.set("page_size", String(query.cursor.page_size));
+        }
+    } else {
+        if (query.cursor.last_id) {
+            params.set("last_id", query.cursor.last_id);
+        }
+        if (query.cursor.last_score !== undefined) {
+            params.set("last_score", String(query.cursor.last_score));
+        }
+        if (query.cursor.limit !== undefined) {
+            params.set("limit", String(query.cursor.limit));
+        }
     }
 
     return params.toString();
@@ -32,6 +52,7 @@ export function deserializeQuery(params: URLSearchParams): SearchPostsQuery {
         return params.get(key)?.split(",").map((item) => item.trim()).filter(Boolean) ?? [];
     };
 
+    const mode = params.get("mode") === "keyset" ? "keyset" : "offset";
     const rawPage = Number.parseInt(params.get("page") ?? "0", 10);
     const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
 
@@ -41,7 +62,20 @@ export function deserializeQuery(params: URLSearchParams): SearchPostsQuery {
             should: readValues("should"),
             must_not: readValues("must_not"),
         },
-        cursor: {page},
+        text_query: params.get("q") ?? "",
+        cursor:
+            mode === "keyset"
+                ? {
+                      mode,
+                      last_id: params.get("last_id") ?? undefined,
+                      last_score: params.get("last_score") ? Number(params.get("last_score")) : undefined,
+                      limit: params.get("limit") ? Number(params.get("limit")) : undefined,
+                  }
+                : {
+                      mode,
+                      page,
+                      page_size: params.get("page_size") ? Number(params.get("page_size")) : undefined,
+                  },
     }
 }
 
@@ -57,7 +91,8 @@ export function parseSearch(tagString: string): SearchPostsQuery {
             should: [],
             must_not: [],
         },
-        cursor: {page: 0},
+        text_query: "",
+        cursor: { mode: "offset", page: 0 },
     }
 
     for (const token of tokens) {

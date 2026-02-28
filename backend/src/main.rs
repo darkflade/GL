@@ -47,9 +47,9 @@ async fn main() -> anyhow::Result<()> {
     log::info!("server startup complete, listening on http://{}:{}",server_ip_address, server_port);
     web_server::run_web_server(
         post_repo,
+        playlist_repo,
         tag_repo,
         file_repo,
-        playlist_repo,
         user_repo,
         file_storage,
         server_ip_address,

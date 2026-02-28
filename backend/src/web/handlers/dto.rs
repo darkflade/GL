@@ -1,5 +1,5 @@
 use serde::{Deserialize};
-use crate::domain::model::{Cursor, TagQuery};
+use crate::domain::model::{PaginationMode, PostID, SearchPlaylistsResponse, TagQuery};
 
 #[derive(Deserialize)]
 pub struct CreatePostMeta {
@@ -17,16 +17,40 @@ pub struct SearchParams {
 pub struct SearchQueryParams {
     pub text_query: Option<String>,
     pub tag_query: Option<TagQuery>,
-    pub cursor: Option<Cursor>,
+    pub cursor: Option<SearchCursorParams>,
 }
 
-impl From<Option<Cursor>> for Cursor {
-    fn from(cursor: Option<Cursor>) -> Self {
-        Self {
-            page: match cursor {
-                Some(cursor) => cursor.page,
-                None => 0,
-            }
+#[derive(Deserialize, Default, Clone)]
+pub struct SearchCursorParams {
+    pub mode: Option<PaginationMode>,
+    pub page: Option<i64>,
+    pub last_id: Option<PostID>,
+    pub last_score: Option<f64>,
+    pub limit: Option<i64>,
+}
+
+impl Default for TagQuery {
+    fn default() -> Self {
+        Self{
+            must:       vec![],
+            should:     vec![],
+            must_not:   vec![],
+        }
+    }
+}
+
+impl Default for PaginationMode {
+    fn default() -> Self {
+        PaginationMode::Keyset
+    }
+}
+
+impl Default for SearchPlaylistsResponse {
+    fn default() -> Self {
+        Self{
+            playlists: vec![],
+            has_next: false,
+            next_cursor: None,
         }
     }
 }

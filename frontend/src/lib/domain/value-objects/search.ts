@@ -1,21 +1,26 @@
-import type {UUID} from "$lib/domain";
-
 export interface SearchPostsQuery {
     tag_query: TagQuery;
+    text_query: string;
     cursor: Cursor;
 }
 
 export interface TagQuery {
-    must: UUID[];
-    should: UUID[];
-    must_not: UUID[];
+    must: string[];
+    should: string[];
+    must_not: string[];
 }
 
-export interface Cursor {
+export type Cursor = OffsetCursor | KeysetCursor;
+
+export interface OffsetCursor {
+    mode: "offset";
     page: number;
+    page_size?: number;
 }
 
-export interface SearchPlaylistQuery {
-    tags: SearchPostsQuery | null;
-    name: string | null;
+export interface KeysetCursor {
+    mode: "keyset";
+    last_id?: string;
+    last_score?: number;
+    limit?: number;
 }

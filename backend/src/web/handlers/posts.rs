@@ -7,55 +7,82 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
-use crate::domain::model::{ByteStream, Cursor, NewTag, StorageError, TagCategory};
-use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
+use crate::domain::model::{ByteStream, Cursor, KeysetCursor, NewTag, PaginationMode, StorageError, TagCategory, TagQuery};
+use crate::domain::repository::{FileRepository, PlaylistRepository, PostRepository, TagRepository};
 use crate::web::error::AppError;
 use crate::web::handlers::dto::{CreatePostMeta, SearchQueryParams};
-use crate::web::handlers::utils::{map_repo_error, parse_uuid};
+use crate::web::handlers::utils::{has_filters, map_repo_error, parse_uuid};
 
-pub async fn search_posts<PR, TR, FR, FS>(
-    services:  web::Data<Services<PR, TR, FR, FS>>,
+pub async fn search_posts<PR, PLR, TR, FR, FS>(
+    services:  web::Data<Services<PR, PLR, TR, FR, FS>>,
     query:      web::Json<SearchQueryParams>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
+    PLR: PlaylistRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
 
     let tag_query = query.tag_query.clone().unwrap_or_default();
-    let cursor: Cursor = query.cursor.clone().into();
+    let cursor = query.cursor.clone().unwrap_or_default();
+    let cursor_mode = cursor.mode.clone().unwrap_or_default();
 
-    log::info!("search posts requested");
+    log::info!("search posts requested mode={cursor_mode:?}");
 
-    if tag_query.must.is_empty() &&
-        tag_query.should.is_empty() &&
-        tag_query.must_not.is_empty()
-    {
-        let posts = services
-            .get_all_posts
-            .execute(cursor)
-            .await
-            .map_err(|err| map_repo_error(err, "Posts not found", "posts.get_all"))?;
-        return Ok(HttpResponse::Ok().json(posts));
+    match cursor_mode {
+        PaginationMode::Offset => {
+            let offset_cursor: Cursor = cursor.into() ;
+
+            if !has_filters(&tag_query) {
+                let posts = services
+                    .get_all_posts
+                    .execute(offset_cursor)
+                    .await
+                    .map_err(|err| map_repo_error(err, "Posts not found", "posts.get_all"))?;
+                return Ok(HttpResponse::Ok().json(posts));
+            }
+
+            let posts = services
+                .search_posts
+                .execute(tag_query, offset_cursor)
+                .await
+                .map_err(|err| map_repo_error(err, "Posts not found", "posts.search"))?;
+
+            Ok(HttpResponse::Ok().json(posts))
+        }
+        PaginationMode::Keyset => {
+            let keyset_cursor: KeysetCursor = cursor.into();
+
+            if !has_filters(&tag_query) {
+                let posts = services
+                    .get_all_posts_keyset
+                    .execute(keyset_cursor)
+                    .await
+                    .map_err(|err| map_repo_error(err, "Posts not found", "posts.get_all_keyset"))?;
+
+                return Ok(HttpResponse::Ok().json(posts));
+            }
+
+            let posts = services
+                .search_posts_keyset
+                .execute(tag_query, keyset_cursor)
+                .await
+                .map_err(|err| map_repo_error(err, "Posts not found", "posts.search_keyset"))?;
+
+            Ok(HttpResponse::Ok().json(posts))
+        }
     }
-
-    let posts = services
-        .search_posts
-        .execute(tag_query, cursor)
-        .await
-        .map_err(|err| map_repo_error(err, "Posts not found", "posts.search"))?;
-
-    Ok(HttpResponse::Ok().json(posts))
 }
 
-pub async fn create_post<PR, TR, FR, FS>(
+pub async fn create_post<PR, PLR, TR, FR, FS>(
     mut payload:    Multipart,
-    services:       web::Data<Services<PR, TR, FR, FS>>,
+    services:       web::Data<Services<PR, PLR, TR, FR, FS>>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
+    PLR: PlaylistRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -141,12 +168,13 @@ where
     Err(AppError::bad_request("Missing file"))
 }
 
-pub async fn get_post<PR, TR, FR, FS>(
-    services:  web::Data<Services<PR, TR, FR, FS>>,
+pub async fn get_post<PR, PLR, TR, FR, FS>(
+    services:  web::Data<Services<PR, PLR, TR, FR, FS>>,
     path:       web::Path<String>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
+    PLR: PlaylistRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,

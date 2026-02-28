@@ -1,17 +1,18 @@
 use actix_web::{HttpResponse, web};
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
-use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
+use crate::domain::repository::{FileRepository, PlaylistRepository, PostRepository, TagRepository};
 use crate::web::error::AppError;
 use crate::web::handlers::dto::SearchParams;
 use crate::web::handlers::utils::map_repo_error;
 
-pub async fn search_tags<PR, TR, FR, FS>(
-    services: web::Data<Services<PR, TR, FR, FS>>,
+pub async fn search_tags<PR, PLR, TR, FR, FS>(
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
     params: web::Query<SearchParams>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
+    PLR: PlaylistRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,

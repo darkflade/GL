@@ -1,10 +1,11 @@
 use std::path::PathBuf;
-use crate::domain::model::{Cursor, File, PlaylistItem, PlaylistQuery, SearchPlaylistsResponse, Tag, TagQuery, UserID};
+use crate::domain::model::{Cursor, File, KeysetCursor, PlaylistItem, PlaylistQuery, SearchPlaylistsResponse, Tag, TagQuery, UserID};
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 use crate::domain::model::{Playlist, PlaylistContent, PlaylistID, PlaylistSummary, Post, RepoError};
 use crate::domain::repository::PlaylistRepository;
+use crate::storage::postgres::dto::PlaylistItemResponse;
 
 #[derive(Clone)]
 pub struct PostgresPlaylistRepository {
@@ -19,28 +20,6 @@ impl PostgresPlaylistRepository {
 
 #[async_trait]
 impl PlaylistRepository for PostgresPlaylistRepository {
-
-    // async fn get(&self, id: PlaylistID) -> Result<Playlist, RepoError> {
-    //     let row = sqlx::query!(
-    //         "SELECT id, title, description, cover_file_id FROM playlists WHERE id = $1",
-    //         id
-    //     )
-    //         .fetch_optional(&self.pool)
-    //         .await
-    //         .map_err(|_| RepoError::StorageError)?
-    //         .ok_or(RepoError::NotFound)?;
-    //
-    //     Ok(
-    //         Playlist {
-    //             id: row.id,
-    //             title: row.title,
-    //             description: row.description.unwrap_or_default(),
-    //             tags: vec![],
-    //             cover: row.cover_file_id,
-    //             items: vec![],
-    //         }
-    //     )
-    // }
 
     async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError> {
         //let playlist = self.get(user_id.clone(), playlist_id.clone()).await?;
@@ -164,18 +143,15 @@ impl PlaylistRepository for PostgresPlaylistRepository {
     // }
 
     //TODO Make search
-    async fn search_by_tags(&self, user_id: UserID, query: TagQuery, cursor: Cursor) -> Result<SearchPlaylistsResponse, RepoError> {
+    async fn search(&self, user_id: UserID, query: PlaylistQuery, cursor: KeysetCursor) -> Result<SearchPlaylistsResponse, RepoError> {
         log::debug!("playlists.search_by_tags user={user_id} query={query:?} cursor={cursor:?}");
-        Ok(SearchPlaylistsResponse{
-            playlists: vec![],
-            total_pages: 1,
-        })
+        let empty_resp = SearchPlaylistsResponse::default();
+        Ok(empty_resp)
     }
-    async fn get_all(&self, user_id: UserID, cursor: Cursor) -> Result<SearchPlaylistsResponse, RepoError> {
-        log::debug!("playlists.get_all user={user_id} cursor={cursor:?}");
-        Ok(SearchPlaylistsResponse{
-            playlists: vec![],
-            total_pages: 1,
-        })
+
+    async fn get_all(&self, user_id: UserID, cursor: KeysetCursor) -> Result<SearchPlaylistsResponse, RepoError> {
+        log::debug!("playlists.search_by_tags user={user_id} cursor={cursor:?}");
+        let empty_resp = SearchPlaylistsResponse::default();
+        Ok(empty_resp)
     }
 }
