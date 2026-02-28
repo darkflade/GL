@@ -1,18 +1,20 @@
-use actix_web::mime::Mime;
 use crate::domain::model::{FileType, RepoError};
+use actix_web::mime::Mime;
 
-pub fn file_type_from_mime_and_ext(mime: Option<Mime>, ext: Option<&str>) -> Result<FileType, RepoError> {
-
+pub fn file_type_from_mime_and_ext(
+    mime: Option<Mime>,
+    ext: Option<&str>,
+) -> Result<FileType, RepoError> {
     //TODO split to business logic type converter
     if let Some(mime) = mime {
         let essence = mime.essence_str();
 
-         return match essence {
+        return match essence {
             e if e.starts_with("image/") => Ok(FileType::Picture),
             e if e.starts_with("video/") => Ok(FileType::Video),
             e if e.starts_with("audio/") => Ok(FileType::Audio),
             _ => Err(RepoError::StorageError),
-        }
+        };
     }
 
     //TODO make errors talk
@@ -25,5 +27,4 @@ pub fn file_type_from_mime_and_ext(mime: Option<Mime>, ext: Option<&str>) -> Res
         //TODO make errors talk
         _ => Err(RepoError::StorageError),
     }
-
 }

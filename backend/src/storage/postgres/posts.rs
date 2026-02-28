@@ -1,14 +1,13 @@
+use crate::domain::model::{
+    Cursor, KeysetCursor, NewPost, NextKeysetCursor, PaginationMode, Post, PostID, RepoError,
+    SearchPostsKeysetResponse, SearchPostsOffsetResponse, Tag, TagID, TagQuery,
+};
+use crate::domain::repository::PostRepository;
+use crate::storage::postgres::dto::{FileResponse, TagResponse};
 use async_trait::async_trait;
 use sqlx::PgPool;
-use sqlx::Row;
 use sqlx::types::Json;
-use sqlx::postgres::PgRow;
-use dto::TagResponse;
-use dto::FileResponse;
 use uuid::Uuid;
-use crate::domain::model::{Cursor, KeysetCursor, NewPost, NextKeysetCursor, PaginationMode, Post, PostID, RepoError, SearchPostsKeysetResponse, SearchPostsOffsetResponse, Tag, TagID, TagQuery};
-use crate::domain::repository::PostRepository;
-use crate::storage::postgres::dto;
 
 #[derive(Clone)]
 pub struct PostgresPostRepository {
@@ -16,58 +15,12 @@ pub struct PostgresPostRepository {
 }
 
 impl PostgresPostRepository {
+    const OFFSET_LIMIT: i64 = 20;
+    const DEFAULT_KEYSET_LIMIT: i64 = 30;
+    const MAX_KEYSET_LIMIT: i64 = 100;
+
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
-    }
-
-    fn parse_keyset_row(row: &PgRow) -> Result<(Post, f64), RepoError> {
-        let id: PostID = row.try_get("id").map_err(|err| {
-            log::error!("posts.keyset failed to parse id: {err}");
-            RepoError::StorageError
-        })?;
-        let title: String = row.try_get("title").map_err(|err| {
-            log::error!("posts.keyset failed to parse title: {err}");
-            RepoError::StorageError
-        })?;
-        let description: Option<String> = row.try_get("description").map_err(|err| {
-            log::error!("posts.keyset failed to parse description: {err}");
-            RepoError::StorageError
-        })?;
-
-        let tags_json: serde_json::Value = row.try_get("tags").map_err(|err| {
-            log::error!("posts.keyset failed to parse tags json: {err}");
-            RepoError::StorageError
-        })?;
-        let tags_response: Vec<TagResponse> = serde_json::from_value(tags_json).map_err(|err| {
-            log::error!("posts.keyset failed to deserialize tags json: {err}");
-            RepoError::StorageError
-        })?;
-
-        let file_json: serde_json::Value = row.try_get("file").map_err(|err| {
-            log::error!("posts.keyset failed to parse file json: {err}");
-            RepoError::StorageError
-        })?;
-        let file_response: FileResponse = serde_json::from_value(file_json).map_err(|err| {
-            log::error!("posts.keyset failed to deserialize file json: {err}");
-            RepoError::StorageError
-        })?;
-
-        let should_score_raw: i64 = row.try_get("should_score").map_err(|err| {
-            log::error!("posts.keyset failed to parse should_score: {err}");
-            RepoError::StorageError
-        })?;
-
-        Ok((
-            Post {
-                id,
-                title,
-                description,
-                file: file_response.into(),
-                tags: tags_response.into_iter().map(Tag::from).collect(),
-                notes: vec![],
-            },
-            should_score_raw as f64,
-        ))
     }
 
     fn build_keyset_response(
@@ -100,18 +53,28 @@ impl PostgresPostRepository {
     }
 
     fn resolve_keyset_limit(cursor: &KeysetCursor) -> i64 {
-        cursor.limit.unwrap_or(30).clamp(1, 100)
+        cursor
+            .limit
+            .unwrap_or(Self::DEFAULT_KEYSET_LIMIT)
+            .clamp(1, Self::MAX_KEYSET_LIMIT)
+    }
+
+    fn count_total_pages(full_count: i64, limit: i64) -> i64 {
+        if full_count == 0 {
+            0
+        } else {
+            (full_count + limit - 1) / limit
+        }
     }
 }
 
 #[async_trait]
 impl PostRepository for PostgresPostRepository {
-    async fn create(
-        &self,
-        post: NewPost,
-        tag_ids: &[TagID],
-    ) -> Result<PostID, RepoError> {
-        let mut tx = self.pool.begin().await.map_err(|_| RepoError::StorageError)?;
+    async fn create(&self, post: NewPost, tag_ids: &[TagID]) -> Result<PostID, RepoError> {
+        let mut tx = self.pool.begin().await.map_err(|err| {
+            log::error!("posts.create failed to begin transaction: {err}");
+            RepoError::StorageError
+        })?;
 
         sqlx::query!(
             "INSERT INTO posts (id, title, file_id) VALUES ($1, $2, $3)",
@@ -119,24 +82,38 @@ impl PostRepository for PostgresPostRepository {
             post.title,
             post.file_id
         )
-            .execute(&mut *tx)
-            .await
-            .map_err(|_| RepoError::StorageError)?;
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            log::error!("posts.create failed to insert post {}: {err}", post.id);
+            RepoError::StorageError
+        })?;
 
-        //:Result<PgQueryResult>
         for tag_id in tag_ids {
             sqlx::query!(
-            "INSERT INTO post_tags (post_id, tag_id) VALUES ($1, $2)",
-            post.id,
-            tag_id
-        )
-                .execute(&mut *tx)
-                .await
-                .map_err(|_| RepoError::StorageError)?;
-
+                "INSERT INTO post_tags (post_id, tag_id) VALUES ($1, $2)",
+                post.id,
+                tag_id
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| {
+                log::error!(
+                    "posts.create failed to attach tag {} to post {}: {err}",
+                    tag_id,
+                    post.id
+                );
+                RepoError::StorageError
+            })?;
         }
 
-        tx.commit().await.map_err(|_| RepoError::StorageError)?;
+        tx.commit().await.map_err(|err| {
+            log::error!(
+                "posts.create failed to commit transaction for post {}: {err}",
+                post.id
+            );
+            RepoError::StorageError
+        })?;
 
         Ok(post.id)
     }
@@ -180,33 +157,33 @@ impl PostRepository for PostgresPostRepository {
             "#,
             id
         )
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| {
-                log::error!("posts.get db query failed: {e}");
-                RepoError::StorageError
-            })?;
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| {
+            log::error!("posts.get db query failed: {e}");
+            RepoError::StorageError
+        })?;
 
         let row = row.ok_or(RepoError::NotFound)?;
 
-
-        Ok(
-            Post {
-                id: row.id,
-                title: row.title,
-                description: row.description,
-                file: row.file.0.into(),
-                tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                //TODO load notes
-                notes: vec![],
-            }
-        )
+        Ok(Post {
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            file: row.file.0.into(),
+            tags: row.tags.0.into_iter().map(Tag::from).collect(),
+            //TODO load notes
+            notes: vec![],
+        })
     }
 
-    async fn search(&self, query: TagQuery, cursor: Cursor) -> Result<SearchPostsOffsetResponse, RepoError> {
-
-        let limit: i64 = 20;
-
+    async fn search(
+        &self,
+        query: TagQuery,
+        cursor: Cursor,
+    ) -> Result<SearchPostsOffsetResponse, RepoError> {
+        let limit = Self::OFFSET_LIMIT;
+        let page = cursor.page.max(0);
 
         let rows = sqlx::query!(
             r#"
@@ -273,40 +250,37 @@ impl PostRepository for PostgresPostRepository {
             &query.must[..],
             &query.must_not[..],
             limit,
-            cursor.page*limit,
+            page * limit,
         )
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| {
-                log::error!("posts.search db query failed: {e}");
-                RepoError::StorageError
-            })?;
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            log::error!("posts.search db query failed: {e}");
+            RepoError::StorageError
+        })?;
 
         let full_count = rows.first().map(|row| row.full_count).unwrap_or(0);
-        let page_count = if full_count == 0 {
-            0
-        } else {
-            (full_count + limit - 1) / limit
-        };
+        let page_count = Self::count_total_pages(full_count, limit);
 
-        Ok(
-            SearchPostsOffsetResponse {
-                posts:
-                    rows.into_iter().map(|r| Post {
-                        id: r.id,
-                        title: r.title,
-                        description: r.description,
-                        file: r.file.0.into(),
-                        tags: r.tags.0.into_iter().map(Tag::from).collect(),
-                        notes: vec![],
-                    }).collect(),
-                total_pages: page_count,
-            }
-        )
+        Ok(SearchPostsOffsetResponse {
+            posts: rows
+                .into_iter()
+                .map(|r| Post {
+                    id: r.id,
+                    title: r.title,
+                    description: r.description,
+                    file: r.file.0.into(),
+                    tags: r.tags.0.into_iter().map(Tag::from).collect(),
+                    notes: vec![],
+                })
+                .collect(),
+            total_pages: page_count,
+        })
     }
 
     async fn get_all(&self, cursor: Cursor) -> Result<SearchPostsOffsetResponse, RepoError> {
-        let limit:i64 = 20;
+        let limit = Self::OFFSET_LIMIT;
+        let page = cursor.page.max(0);
 
         let rows = sqlx::query!(
             r#"
@@ -349,47 +323,46 @@ impl PostRepository for PostgresPostRepository {
             OFFSET $2
             "#,
             limit,
-            cursor.page*limit,
+            page * limit,
         )
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| {
-                log::error!("posts.get_all db query failed: {e}");
-                RepoError::StorageError
-            })?;
-
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            log::error!("posts.get_all db query failed: {e}");
+            RepoError::StorageError
+        })?;
 
         let full_count = rows.first().map(|row| row.full_count).unwrap_or(0);
-        let page_count = if full_count == 0 {
-            0
-        } else {
-            (full_count + limit - 1) / limit
-        };
-
+        let page_count = Self::count_total_pages(full_count, limit);
 
         Ok(SearchPostsOffsetResponse {
-            posts:
-                rows.into_iter().map(|r| Post {
-                    id:             r.id,
-                    title:          r.title,
-                    file:           r.file.0.into(),
-                    description:    r.description,
-                    tags:           r.tags.0.into_iter().map(Tag::from).collect(),
-                    notes:          vec![],
-                }).collect(),
+            posts: rows
+                .into_iter()
+                .map(|r| Post {
+                    id: r.id,
+                    title: r.title,
+                    file: r.file.0.into(),
+                    description: r.description,
+                    tags: r.tags.0.into_iter().map(Tag::from).collect(),
+                    notes: vec![],
+                })
+                .collect(),
             total_pages: page_count,
         })
-
     }
 
-    async fn search_keyset(&self, query: TagQuery, cursor: KeysetCursor) -> Result<SearchPostsKeysetResponse, RepoError> {
+    async fn search_keyset(
+        &self,
+        query: TagQuery,
+        cursor: KeysetCursor,
+    ) -> Result<SearchPostsKeysetResponse, RepoError> {
         let limit = Self::resolve_keyset_limit(&cursor);
         let query_limit = limit + 1;
         let use_cursor = cursor.last_id.is_some() && cursor.last_score.is_some();
         let last_id = cursor.last_id.unwrap_or(Uuid::nil());
         let last_score = cursor.last_score.unwrap_or(f64::MAX);
 
-        let rows = sqlx::query(
+        let rows = sqlx::query!(
             r#"
             WITH ranked_posts AS (
                 SELECT
@@ -421,7 +394,7 @@ impl PostRepository for PostgresPostRepository {
                     ) AS file,
                     COUNT(DISTINCT CASE
                         WHEN t.name = ANY($1) THEN t.name
-                    END) AS should_score
+                    END)::bigint AS should_score
                 FROM posts p
                 LEFT JOIN post_tags pt ON pt.post_id = p.id
                 LEFT JOIN tags t ON t.id = pt.tag_id
@@ -444,9 +417,9 @@ impl PostRepository for PostgresPostRepository {
                 id,
                 title,
                 description,
-                tags,
-                file,
-                should_score
+                tags AS "tags!: Json<Vec<TagResponse>>",
+                file AS "file!: Json<FileResponse>",
+                should_score AS "should_score!: i64"
             FROM ranked_posts
             WHERE
                 $4 = false
@@ -455,14 +428,14 @@ impl PostRepository for PostgresPostRepository {
             ORDER BY should_score DESC, id DESC
             LIMIT $7
             "#,
+            &query.should[..],
+            &query.must[..],
+            &query.must_not[..],
+            use_cursor,
+            last_score,
+            last_id,
+            query_limit
         )
-        .bind(&query.should)
-        .bind(&query.must)
-        .bind(&query.must_not)
-        .bind(use_cursor)
-        .bind(last_score)
-        .bind(last_id)
-        .bind(query_limit)
         .fetch_all(&self.pool)
         .await
         .map_err(|err| {
@@ -470,21 +443,36 @@ impl PostRepository for PostgresPostRepository {
             RepoError::StorageError
         })?;
 
-        let parsed_rows: Result<Vec<(Post, f64)>, RepoError> = rows
-            .iter()
-            .map(Self::parse_keyset_row)
+        let parsed_rows = rows
+            .into_iter()
+            .map(|row| {
+                (
+                    Post {
+                        id: row.id,
+                        title: row.title,
+                        description: row.description,
+                        file: row.file.0.into(),
+                        tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                        notes: vec![],
+                    },
+                    row.should_score as f64,
+                )
+            })
             .collect();
 
-        Ok(Self::build_keyset_response(parsed_rows?, limit))
+        Ok(Self::build_keyset_response(parsed_rows, limit))
     }
 
-    async fn get_all_keyset(&self, cursor: KeysetCursor) -> Result<SearchPostsKeysetResponse, RepoError> {
+    async fn get_all_keyset(
+        &self,
+        cursor: KeysetCursor,
+    ) -> Result<SearchPostsKeysetResponse, RepoError> {
         let limit = Self::resolve_keyset_limit(&cursor);
         let query_limit = limit + 1;
         let use_cursor = cursor.last_id.is_some();
         let last_id = cursor.last_id.unwrap_or(Uuid::nil());
 
-        let rows = sqlx::query(
+        let rows = sqlx::query!(
             r#"
             SELECT
                 p.id,
@@ -500,7 +488,7 @@ impl PostRepository for PostgresPostRepository {
                         )
                     ) FILTER (WHERE pt.tag_id IS NOT NULL),
                     '[]'::jsonb
-                ) AS tags,
+                ) AS "tags!: Json<Vec<TagResponse>>",
                 (
                     SELECT jsonb_build_object(
                         'id', f.id,
@@ -512,8 +500,8 @@ impl PostRepository for PostgresPostRepository {
                     )
                     FROM files f
                     WHERE f.id = p.file_id
-                ) AS file,
-                0::bigint AS should_score
+                ) AS "file!: Json<FileResponse>",
+                0::bigint AS "should_score!: i64"
             FROM posts p
             LEFT JOIN post_tags pt ON pt.post_id = p.id
             LEFT JOIN tags t ON t.id = pt.tag_id
@@ -523,10 +511,10 @@ impl PostRepository for PostgresPostRepository {
             ORDER BY p.id DESC
             LIMIT $3
             "#,
+            use_cursor,
+            last_id,
+            query_limit,
         )
-        .bind(use_cursor)
-        .bind(last_id)
-        .bind(query_limit)
         .fetch_all(&self.pool)
         .await
         .map_err(|err| {
@@ -534,87 +522,23 @@ impl PostRepository for PostgresPostRepository {
             RepoError::StorageError
         })?;
 
-        let parsed_rows: Result<Vec<(Post, f64)>, RepoError> = rows
-            .iter()
-            .map(Self::parse_keyset_row)
+        let parsed_rows = rows
+            .into_iter()
+            .map(|row| {
+                (
+                    Post {
+                        id: row.id,
+                        title: row.title,
+                        description: row.description,
+                        file: row.file.0.into(),
+                        tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                        notes: vec![],
+                    },
+                    row.should_score as f64,
+                )
+            })
             .collect();
 
-        Ok(Self::build_keyset_response(parsed_rows?, limit))
+        Ok(Self::build_keyset_response(parsed_rows, limit))
     }
-
 }
-
-
-// Keyset
-//let use_cursor = !(cursor.id.is_nil() && cursor.score == 0);
-// WITH ranked_posts AS (
-// SELECT
-// p.id,
-// p.title,
-// p.description,
-// COALESCE(
-// jsonb_agg(
-// jsonb_build_object(
-// 'id', pt.tag_id,
-// 'name', t.name,
-// 'category', t.category,
-// 'count', t.post_count
-// )
-// ) FILTER (WHERE pt.tag_id IS NOT NULL),
-// '[]'::jsonb
-// ) AS tags,
-// (
-// SELECT jsonb_build_object(
-// 'id', f.id,
-// 'path', f.path,
-// 'hash', f.hash,
-// 'media_type', f.media_type,
-// 'meta', f.meta,
-// 'created_at', f.created_at
-// )
-// FROM files f
-// WHERE f.id = p.file_id
-// ) AS file,
-// COUNT(DISTINCT CASE
-// WHEN t.name = ANY($1) THEN t.name
-// END) AS should_score
-//
-// FROM posts p
-// LEFT JOIN post_tags pt ON pt.post_id = p.id
-// LEFT JOIN tags t ON t.id = pt.tag_id
-//
-// GROUP BY p.id
-//
-// HAVING
-// COUNT(DISTINCT CASE
-// WHEN t.name = ANY($2) THEN t.name
-// END) = cardinality($2)
-// AND
-// NOT EXISTS (
-// SELECT 1
-// FROM post_tags x
-// JOIN tags tx ON tx.id = x.tag_id
-// WHERE x.post_id = p.id
-// AND tx.name = ANY($3)
-// )
-// )
-// SELECT
-// rp.id,
-// rp.title,
-// rp.description,
-// rp.tags AS "tags!: Json<Vec<TagResponse>>",
-// rp.file AS "file!: Json<FileResponse>"
-// FROM ranked_posts rp
-// WHERE
-// NOT $4
-// OR rp.should_score < $5
-// OR (rp.should_score = $5 AND rp.id < $6)
-// ORDER BY rp.should_score DESC, rp.id DESC
-// LIMIT 20
-// "#,
-//             &query.should[..],
-//             &query.must[..],
-//             &query.must_not[..],
-//             use_cursor,
-//             cursor.score,
-//             cursor.id,

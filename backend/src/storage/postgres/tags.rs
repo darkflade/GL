@@ -1,8 +1,8 @@
+use crate::domain::model::{NewTag, RepoError, Tag};
+use crate::domain::repository::TagRepository;
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::domain::model::{NewTag, RepoError, Tag};
-use crate::domain::repository::TagRepository;
 
 #[derive(Clone)]
 pub struct PostgresTagRepository {
@@ -17,9 +17,7 @@ impl PostgresTagRepository {
 
 #[async_trait]
 impl TagRepository for PostgresTagRepository {
-
     async fn get_or_create(&self, tags: Vec<NewTag>) -> Result<Vec<Tag>, RepoError> {
-
         let mut result = Vec::new();
         for new_tag in tags {
             let rec = sqlx::query!(
@@ -30,9 +28,9 @@ impl TagRepository for PostgresTagRepository {
                 new_tag.category as i32,
                 new_tag.value
             )
-                .fetch_one(&self.pool)
-                .await
-                .map_err(|_| RepoError::StorageError)?;
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|_| RepoError::StorageError)?;
 
             result.push(Tag {
                 id: rec.id,
@@ -44,7 +42,7 @@ impl TagRepository for PostgresTagRepository {
         Ok(result)
     }
     async fn search(&self, query: &str, limit: i64) -> Result<Vec<Tag>, RepoError> {
-        let pattern =  format!("{}%", query.to_lowercase());
+        let pattern = format!("{}%", query.to_lowercase());
         let rows = sqlx::query!(
             "
             SELECT id, category, name, post_count AS count
@@ -56,15 +54,18 @@ impl TagRepository for PostgresTagRepository {
             pattern,
             limit
         )
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|_| RepoError::StorageError)?;
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| RepoError::StorageError)?;
 
-        Ok(rows.into_iter().map(|r| Tag {
-            id: r.id,
-            category: r.category.into(),
-            name: r.name,
-            count: r.count,
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| Tag {
+                id: r.id,
+                category: r.category.into(),
+                name: r.name,
+                count: r.count,
+            })
+            .collect())
     }
 }

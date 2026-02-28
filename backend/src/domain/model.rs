@@ -1,10 +1,10 @@
-use std::path::PathBuf;
-use std::pin::Pin;
 use actix_web::web::Bytes;
 use futures_util::Stream;
-use uuid::Uuid;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::pin::Pin;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, StorageError>> + Send>>;
 
@@ -17,7 +17,6 @@ pub type PlaylistID = Uuid;
 pub type PlaylistItemID = Uuid;
 pub type UserID = Uuid;
 pub type RelativePath = String;
-
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum FileType {
@@ -38,7 +37,7 @@ impl From<i16> for FileType {
             0 => FileType::Picture,
             1 => FileType::Video,
             2 => FileType::Audio,
-            _ => FileType::Picture
+            _ => FileType::Picture,
         }
     }
 }
@@ -63,7 +62,7 @@ impl From<i16> for TagCategory {
             0 => TagCategory::Artist,
             1 => TagCategory::Copyright,
             2 => TagCategory::Character,
-            _ => TagCategory::General
+            _ => TagCategory::General,
         }
     }
 }
@@ -112,7 +111,6 @@ pub struct Thumbnail {
     path: PathBuf,
     size_type: ThumbSizeType,
     created_at: Option<OffsetDateTime>,
-
 }
 
 impl Default for File {
@@ -152,7 +150,7 @@ pub struct Playlist {
     pub description: String,
     pub tags: Vec<Tag>,
     pub cover: Option<FileID>,
-    pub items: Vec<PlaylistItem>
+    pub items: Vec<PlaylistItem>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -165,7 +163,7 @@ pub struct PlaylistItem {
 #[derive(Clone, Serialize, Deserialize)]
 pub enum PlaylistContent {
     Post(Post),
-    Note(String)
+    Note(String),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -212,10 +210,20 @@ pub struct TagQuery {
     pub must_not: Vec<String>,
 }
 
+impl Default for TagQuery {
+    fn default() -> Self {
+        Self {
+            must: vec![],
+            should: vec![],
+            must_not: vec![],
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PlaylistQuery {
-    pub tags: Option<TagQuery>,
-    pub text: Option<String>,
+    pub tags: TagQuery,
+    pub text: String,
 }
 
 // Errors
@@ -232,7 +240,7 @@ pub enum StorageError {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Cursor{
+pub struct Cursor {
     pub page: i64,
 }
 
@@ -243,10 +251,16 @@ pub enum PaginationMode {
     Keyset,
 }
 
+impl Default for PaginationMode {
+    fn default() -> Self {
+        PaginationMode::Keyset
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct KeysetCursor {
     pub mode: Option<PaginationMode>,
-    pub last_id: Option<PostID>,
+    pub last_id: Option<Uuid>,
     pub last_score: Option<f64>,
     pub limit: Option<i64>,
 }
@@ -255,7 +269,7 @@ pub struct KeysetCursor {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NextKeysetCursor {
     pub mode: PaginationMode,
-    pub last_id: PostID,
+    pub last_id: Uuid,
     pub last_score: f64,
     pub limit: i64,
 }
@@ -278,4 +292,14 @@ pub struct SearchPlaylistsResponse {
     pub playlists: Vec<PlaylistSummary>,
     pub has_next: bool,
     pub next_cursor: Option<NextKeysetCursor>,
+}
+
+impl Default for SearchPlaylistsResponse {
+    fn default() -> Self {
+        Self {
+            playlists: vec![],
+            has_next: false,
+            next_cursor: None,
+        }
+    }
 }

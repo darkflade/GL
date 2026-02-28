@@ -1,10 +1,13 @@
-use std::path::PathBuf;
-use actix_web::mime::Mime;
-use uuid::Uuid;
 use crate::application::helpers::file_type_determinator::file_type_from_mime_and_ext;
 use crate::domain::files::FileStorage;
-use crate::domain::model::{ByteStream, Cursor, File, KeysetCursor, NewPost, NewTag, Post, PostID, RepoError, SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery};
+use crate::domain::model::{
+    ByteStream, Cursor, File, KeysetCursor, NewPost, NewTag, Post, PostID, RepoError,
+    SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
+};
 use crate::domain::repository::{FileRepository, PostRepository, TagRepository};
+use actix_web::mime::Mime;
+use std::path::PathBuf;
+use uuid::Uuid;
 
 // Post Use-Case
 pub struct CreatePostUseCase<PR, TR, FR, FS> {
@@ -14,23 +17,24 @@ pub struct CreatePostUseCase<PR, TR, FR, FS> {
     pub storage: FS,
 }
 
-impl<PR: PostRepository, TR: TagRepository, FR: FileRepository, FS: FileStorage> CreatePostUseCase<PR, TR, FR, FS> {
+impl<PR: PostRepository, TR: TagRepository, FR: FileRepository, FS: FileStorage>
+    CreatePostUseCase<PR, TR, FR, FS>
+{
     pub async fn execute(
         &self,
         title: String,
         stream: ByteStream,
         file_ext: Option<&str>,
         mime_type: Option<Mime>,
-        tags: Vec<NewTag>
+        tags: Vec<NewTag>,
     ) -> Result<PostID, RepoError> {
-
         let media_type = file_type_from_mime_and_ext(mime_type, file_ext)?;
 
-        let (file_id, rel_path) = self.storage.save_stream(stream, file_ext)
+        let (file_id, rel_path) = self
+            .storage
+            .save_stream(stream, file_ext)
             .await
             .map_err(|_| RepoError::StorageError)?;
-
-
 
         /*
         let file_model = self.files.save_temp_file(rel_path, file_ext)
@@ -51,10 +55,8 @@ impl<PR: PostRepository, TR: TagRepository, FR: FileRepository, FS: FileStorage>
 
         self.files.create(file_model).await?;
 
-
         let created_tags = self.tags.get_or_create(tags).await?;
         let tag_ids: Vec<Uuid> = created_tags.into_iter().map(|t| t.id).collect();
-
 
         let new_post = NewPost {
             id: Uuid::now_v7(),
@@ -87,7 +89,11 @@ pub struct GetAllPostsKeysetUseCase<PR> {
 }
 
 impl<PR: PostRepository> SearchPostsUseCase<PR> {
-    pub async fn execute(&self, query: TagQuery, cursor: Cursor) -> Result<SearchPostsOffsetResponse, RepoError> {
+    pub async fn execute(
+        &self,
+        query: TagQuery,
+        cursor: Cursor,
+    ) -> Result<SearchPostsOffsetResponse, RepoError> {
         self.repo.search(query, cursor).await
     }
 }
@@ -98,13 +104,20 @@ impl<PR: PostRepository> GetAllPostsUseCase<PR> {
 }
 
 impl<PR: PostRepository> SearchPostsKeysetUseCase<PR> {
-    pub async fn execute(&self, query: TagQuery, cursor: KeysetCursor) -> Result<SearchPostsKeysetResponse, RepoError> {
+    pub async fn execute(
+        &self,
+        query: TagQuery,
+        cursor: KeysetCursor,
+    ) -> Result<SearchPostsKeysetResponse, RepoError> {
         self.repo.search_keyset(query, cursor).await
     }
 }
 
 impl<PR: PostRepository> GetAllPostsKeysetUseCase<PR> {
-    pub async fn execute(&self, cursor: KeysetCursor) -> Result<SearchPostsKeysetResponse, RepoError> {
+    pub async fn execute(
+        &self,
+        cursor: KeysetCursor,
+    ) -> Result<SearchPostsKeysetResponse, RepoError> {
         self.repo.get_all_keyset(cursor).await
     }
 }

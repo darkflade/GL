@@ -1,10 +1,12 @@
-use actix_web::{HttpResponse, web};
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
-use crate::domain::repository::{FileRepository, PlaylistRepository, PostRepository, TagRepository};
+use crate::domain::repository::{
+    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+};
 use crate::web::error::AppError;
 use crate::web::handlers::dto::SearchParams;
 use crate::web::handlers::utils::map_repo_error;
+use actix_web::{HttpResponse, web};
 
 pub async fn search_tags<PR, PLR, TR, FR, FS>(
     services: web::Data<Services<PR, PLR, TR, FR, FS>>,
@@ -17,14 +19,13 @@ where
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
-    
     let query = &params.query;
     let limit = 10;
-    
+
     if query.is_empty() {
         return Err(AppError::bad_request("No query given"));
     }
-    
+
     let tags = services
         .search_tags
         .execute(query, limit)
@@ -32,5 +33,4 @@ where
         .map_err(|err| map_repo_error(err, "Tags not found", "tags.search"))?;
 
     Ok(HttpResponse::Ok().json(tags))
-
 }

@@ -1,3 +1,3 @@
+pub mod file_storage;
 pub mod in_memory;
 pub mod postgres;
-pub mod file_storage;

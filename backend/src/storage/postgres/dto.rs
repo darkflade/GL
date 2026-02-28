@@ -1,10 +1,13 @@
-use std::any::Any;
-use std::path::PathBuf;
+use crate::domain::model::{
+    Cursor, CursorID, File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem,
+    PlaylistItemID, Post, PostID, Tag, TagCategory, TagID,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
-use time::format_description::well_known::Rfc3339;
+use std::any::Any;
+use std::path::PathBuf;
 use time::OffsetDateTime;
-use crate::domain::model::{Cursor, CursorID, File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID, Post, PostID, Tag, TagCategory, TagID};
+use time::format_description::well_known::Rfc3339;
 
 #[derive(Debug, Deserialize)]
 pub struct FileResponse {
@@ -17,20 +20,22 @@ pub struct FileResponse {
     pub created_at: Option<OffsetDateTime>,
 }
 
-
-fn deserialize_optional_offset_datetime<'de, D>(deserializer: D) -> Result<Option<OffsetDateTime>, D::Error>
+fn deserialize_optional_offset_datetime<'de, D>(
+    deserializer: D,
+) -> Result<Option<OffsetDateTime>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let opt = Option::<String>::deserialize(deserializer)?;
     match opt {
-        Some(s) => OffsetDateTime::parse(&s, &Rfc3339).map(Some).map_err(serde::de::Error::custom),
+        Some(s) => OffsetDateTime::parse(&s, &Rfc3339)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
         None => Ok(None),
     }
 }
 
 impl From<FileResponse> for File {
-
     fn from(row: FileResponse) -> Self {
         Self {
             id: row.id,
@@ -44,18 +49,18 @@ impl From<FileResponse> for File {
     }
 }
 
-impl From<Json<FileMetaResponse>> for FileMeta {
-    fn from(j: Json<FileMetaResponse>) -> Self {
-        j.0.into()
-    }
-}
-
 #[derive(Debug, Deserialize)]
 pub struct FileMetaResponse {
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub extension: Option<String>,
     pub duration_ms: Option<i64>,
+}
+
+impl From<Json<FileMetaResponse>> for FileMeta {
+    fn from(j: Json<FileMetaResponse>) -> Self {
+        j.0.into()
+    }
 }
 
 impl From<FileMetaResponse> for FileMeta {

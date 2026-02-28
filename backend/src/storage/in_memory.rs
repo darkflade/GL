@@ -1,6 +1,6 @@
-use async_trait::async_trait;
 use crate::domain::model::{File, Playlist, Post, PostID, PostNote, Tag, TagQuery};
-use crate::domain::repository::{PostRepository};
+use crate::domain::repository::PostRepository;
+use async_trait::async_trait;
 /*
 pub struct InMemoryPostRepository {
     posts: Vec<Post>,
@@ -42,4 +42,3 @@ impl PostRepository for InMemoryPostRepository {
     }
 }
 */
-

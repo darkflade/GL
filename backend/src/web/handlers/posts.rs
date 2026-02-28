@@ -1,21 +1,25 @@
-use std::path::Path;
+use crate::application::use_cases::services::Services;
+use crate::domain::files::FileStorage;
+use crate::domain::model::{
+    ByteStream, Cursor, KeysetCursor, NewTag, PaginationMode, StorageError, TagCategory, TagQuery,
+};
+use crate::domain::repository::{
+    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+};
+use crate::web::error::AppError;
+use crate::web::handlers::dto::{CreatePostMeta, SearchQueryParams};
+use crate::web::handlers::utils::{has_filters, map_repo_error, parse_uuid};
 use actix_multipart::Multipart;
 use actix_web::{HttpResponse, web};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::from_slice;
+use std::path::Path;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use crate::application::use_cases::services::Services;
-use crate::domain::files::FileStorage;
-use crate::domain::model::{ByteStream, Cursor, KeysetCursor, NewTag, PaginationMode, StorageError, TagCategory, TagQuery};
-use crate::domain::repository::{FileRepository, PlaylistRepository, PostRepository, TagRepository};
-use crate::web::error::AppError;
-use crate::web::handlers::dto::{CreatePostMeta, SearchQueryParams};
-use crate::web::handlers::utils::{has_filters, map_repo_error, parse_uuid};
 
 pub async fn search_posts<PR, PLR, TR, FR, FS>(
-    services:  web::Data<Services<PR, PLR, TR, FR, FS>>,
-    query:      web::Json<SearchQueryParams>,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    query: web::Json<SearchQueryParams>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -24,7 +28,6 @@ where
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
-
     let tag_query = query.tag_query.clone().unwrap_or_default();
     let cursor = query.cursor.clone().unwrap_or_default();
     let cursor_mode = cursor.mode.clone().unwrap_or_default();
@@ -33,7 +36,7 @@ where
 
     match cursor_mode {
         PaginationMode::Offset => {
-            let offset_cursor: Cursor = cursor.into() ;
+            let offset_cursor: Cursor = cursor.into();
 
             if !has_filters(&tag_query) {
                 let posts = services
@@ -60,7 +63,9 @@ where
                     .get_all_posts_keyset
                     .execute(keyset_cursor)
                     .await
-                    .map_err(|err| map_repo_error(err, "Posts not found", "posts.get_all_keyset"))?;
+                    .map_err(|err| {
+                        map_repo_error(err, "Posts not found", "posts.get_all_keyset")
+                    })?;
 
                 return Ok(HttpResponse::Ok().json(posts));
             }
@@ -77,8 +82,8 @@ where
 }
 
 pub async fn create_post<PR, PLR, TR, FR, FS>(
-    mut payload:    Multipart,
-    services:       web::Data<Services<PR, PLR, TR, FR, FS>>,
+    mut payload: Multipart,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -105,7 +110,9 @@ where
                 let mut body = Vec::new();
                 while let Some(chunk) = field.next().await {
                     let bytes = chunk.map_err(|err| {
-                        AppError::bad_request(format!("invalid meta chunk in multipart payload: {err}"))
+                        AppError::bad_request(format!(
+                            "invalid meta chunk in multipart payload: {err}"
+                        ))
                     })?;
                     body.extend_from_slice(&bytes);
                 }
@@ -140,21 +147,27 @@ where
 
                 let stream: ByteStream = Box::pin(ReceiverStream::new(rx));
 
-                let new_tags: Vec<NewTag> = meta_data.tags.iter().map(|t| NewTag {
-                    //TODO There is something wrong
-                    category: TagCategory::General,
-                    value: t.clone(),
-                }).collect();
+                let new_tags: Vec<NewTag> = meta_data
+                    .tags
+                    .iter()
+                    .map(|t| NewTag {
+                        //TODO There is something wrong
+                        category: TagCategory::General,
+                        value: t.clone(),
+                    })
+                    .collect();
 
-                let id = services.create_post.execute(
-                    meta_data.title.clone(),
-                    stream,
-                    file_ext.as_deref(),
-                    content_type,
-                    new_tags,
-                )
-                .await
-                .map_err(|err| map_repo_error(err, "Post not found", "posts.create"))?;
+                let id = services
+                    .create_post
+                    .execute(
+                        meta_data.title.clone(),
+                        stream,
+                        file_ext.as_deref(),
+                        content_type,
+                        new_tags,
+                    )
+                    .await
+                    .map_err(|err| map_repo_error(err, "Post not found", "posts.create"))?;
 
                 return Ok(HttpResponse::Created().json(id));
             }
@@ -164,13 +177,12 @@ where
         }
     }
 
-
     Err(AppError::bad_request("Missing file"))
 }
 
 pub async fn get_post<PR, PLR, TR, FR, FS>(
-    services:  web::Data<Services<PR, PLR, TR, FR, FS>>,
-    path:       web::Path<String>,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    path: web::Path<String>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -179,7 +191,6 @@ where
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
-
     let id_str = path.into_inner();
 
     log::debug!("post requested id={id_str}");
@@ -192,5 +203,4 @@ where
         .map_err(|err| map_repo_error(err, "Post not found", "posts.get"))?;
 
     Ok(HttpResponse::Ok().json(post))
-
 }

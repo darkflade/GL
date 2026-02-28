@@ -1,6 +1,6 @@
-use std::time::{SystemTime, UNIX_EPOCH};
 use colored::Colorize;
 use log::{Level, LevelFilter};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn level_badge(level: Level) -> String {
     match level {

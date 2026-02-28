@@ -1,8 +1,8 @@
+use crate::domain::model::{NewUser, RepoError, User};
+use crate::domain::repository::UserRepository;
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::domain::model::{NewUser, RepoError, User};
-use crate::domain::repository::UserRepository;
 
 #[derive(Clone)]
 pub struct PostgresUserRepository {
@@ -10,21 +10,22 @@ pub struct PostgresUserRepository {
 }
 
 impl PostgresUserRepository {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 }
 
 #[async_trait]
 impl UserRepository for PostgresUserRepository {
-
     async fn find_by_id(&self, id: Uuid) -> Result<User, RepoError> {
         let user = sqlx::query_as!(
             User,
             "SELECT id, username, password_hash FROM users WHERE id = $1",
             id,
         )
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|_| RepoError::NotFound)?;
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|_| RepoError::NotFound)?;
 
         Ok(user)
     }
@@ -34,9 +35,9 @@ impl UserRepository for PostgresUserRepository {
             "SELECT id, username, password_hash FROM users WHERE username = $1",
             username,
         )
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|_| RepoError::NotFound)?;
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|_| RepoError::NotFound)?;
 
         Ok(user)
     }
@@ -49,9 +50,9 @@ impl UserRepository for PostgresUserRepository {
             user.username,
             user.password_hash,
         )
-            .execute(&self.pool)
-            .await
-            .map_err(|_| RepoError::StorageError)?;
+        .execute(&self.pool)
+        .await
+        .map_err(|_| RepoError::StorageError)?;
 
         Ok(id)
     }

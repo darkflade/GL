@@ -1,5 +1,5 @@
-pub mod posts;
-pub mod playlists;
 pub mod files;
-pub mod tags;
+pub mod playlists;
+pub mod posts;
 pub mod services;
+pub mod tags;

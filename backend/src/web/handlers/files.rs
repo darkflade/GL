@@ -1,14 +1,16 @@
-use actix_web::{HttpResponse, web};
-use actix_web::web::Data;
-use crate::domain::files::FileStorage;
 use crate::application::use_cases::services::Services;
-use crate::domain::repository::{FileRepository, PlaylistRepository, PostRepository, TagRepository};
+use crate::domain::files::FileStorage;
+use crate::domain::repository::{
+    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+};
 use crate::web::error::AppError;
 use crate::web::handlers::utils::{map_repo_error, parse_uuid};
+use actix_web::web::Data;
+use actix_web::{HttpResponse, web};
 
 pub async fn download_file<PR, PLR, TR, FR, FS>(
-    services:   Data<Services<PR, PLR, TR, FR, FS>>,
-    path:       web::Path<String>,
+    services: Data<Services<PR, PLR, TR, FR, FS>>,
+    path: web::Path<String>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -49,6 +51,5 @@ where
 
     Ok(HttpResponse::Ok()
         .insert_header(("X-Accel-Redirect", redirect_url))
-        .finish()
-    )
+        .finish())
 }

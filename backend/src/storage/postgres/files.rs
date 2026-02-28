@@ -1,13 +1,13 @@
-use sqlx::types::time::OffsetDateTime;
-use sqlx::types::Json;
-use crate::storage::postgres::dto::FileMetaResponse;
-use async_trait::async_trait;
-use crate::domain::model::FileID;
 use crate::domain::model::File;
+use crate::domain::model::FileID;
 use crate::domain::model::RepoError;
-use sqlx::PgPool;
 use crate::domain::repository::FileRepository;
+use crate::storage::postgres::dto::FileMetaResponse;
 use crate::storage::postgres::dto::FileResponse;
+use async_trait::async_trait;
+use sqlx::PgPool;
+use sqlx::types::Json;
+use sqlx::types::time::OffsetDateTime;
 
 #[derive(Clone)]
 pub struct PostgresFileRepository {
@@ -15,7 +15,9 @@ pub struct PostgresFileRepository {
 }
 
 impl PostgresFileRepository {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 }
 
 #[async_trait]
@@ -37,18 +39,17 @@ impl FileRepository for PostgresFileRepository {
             file.media_type as i16,
             file_meta_json
         )
-            .execute(&self.pool)
-            .await
-            .map_err(|err| {
-                log::error!("files.create db query failed: {err}");
-                RepoError::StorageError
-            })?;
+        .execute(&self.pool)
+        .await
+        .map_err(|err| {
+            log::error!("files.create db query failed: {err}");
+            RepoError::StorageError
+        })?;
 
         Ok(file.id)
     }
 
     async fn get(&self, id: FileID) -> Result<File, RepoError> {
-
         let response = sqlx::query_as!(
             FileResponse,
             r#"
@@ -63,12 +64,12 @@ impl FileRepository for PostgresFileRepository {
             "#,
             id
         )
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| {
-                log::error!("files.get db query failed: {e}");
-                RepoError::StorageError })?;
-
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            log::error!("files.get db query failed: {e}");
+            RepoError::StorageError
+        })?;
 
         File::try_from(response).map_err(|_| RepoError::StorageError)
     }

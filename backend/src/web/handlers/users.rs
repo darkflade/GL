@@ -1,15 +1,14 @@
-use actix_identity::Identity;
-use actix_web::{HttpMessage, HttpRequest, HttpResponse, web};
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::SaltString;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use crate::domain::model::{NewUser, RepoError};
 use crate::domain::repository::UserRepository;
 use crate::web::error::AppError;
 use crate::web::handlers::utils::{map_repo_error, parse_uuid};
-
+use actix_identity::Identity;
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, web};
+use argon2::password_hash::SaltString;
+use argon2::password_hash::rand_core::OsRng;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Serialize)]
 pub struct UserProfile {
@@ -42,18 +41,17 @@ pub async fn get_current_user<UR: UserRepository + Clone>(
         .find_by_id(uuid)
         .await
         .map_err(|err| map_repo_error(err, "User not found", "users.find_by_id"))?;
-    
+
     Ok(HttpResponse::Ok().json(UserProfile {
         id: user_model.id,
         username: user_model.username,
     }))
 }
 
-
-pub async fn login_user<UR: UserRepository  + Clone>(
+pub async fn login_user<UR: UserRepository + Clone>(
     form: web::Json<AuthRequest>,
     user_repo: web::Data<UR>,
-    req: HttpRequest
+    req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
     let user = user_repo
         .find_by_username(&form.username)
@@ -72,7 +70,9 @@ pub async fn login_user<UR: UserRepository  + Clone>(
     }
 
     Identity::login(&req.extensions(), user.id.to_string()).map_err(|err| {
-        AppError::internal(format!("users.login failed to set identity in session: {err}"))
+        AppError::internal(format!(
+            "users.login failed to set identity in session: {err}"
+        ))
     })?;
 
     Ok(HttpResponse::Ok().json("Successfully logged in"))
@@ -84,11 +84,10 @@ pub async fn logout_user(user: Identity) -> Result<HttpResponse, AppError> {
 }
 
 pub async fn register_user<UR: UserRepository + Clone>(
-    form:   web::Json<AuthRequest>,
-    user_repo:   web::Data<UR>,
-    req:    actix_web::HttpRequest,
+    form: web::Json<AuthRequest>,
+    user_repo: web::Data<UR>,
+    req: actix_web::HttpRequest,
 ) -> Result<HttpResponse, AppError> {
-
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     let password_hash = argon2
@@ -101,15 +100,15 @@ pub async fn register_user<UR: UserRepository + Clone>(
         password_hash,
     };
 
-    let user_id = user_repo.create(new_user)
-        .await
-        .map_err(|err| match err {
-            RepoError::StorageError => AppError::conflict("User already exists"),
-            RepoError::NotFound => AppError::internal("users.register impossible not found state"),
-        })?;
+    let user_id = user_repo.create(new_user).await.map_err(|err| match err {
+        RepoError::StorageError => AppError::conflict("User already exists"),
+        RepoError::NotFound => AppError::internal("users.register impossible not found state"),
+    })?;
 
     Identity::login(&req.extensions(), user_id.to_string()).map_err(|err| {
-        AppError::internal(format!("users.register failed to set identity in session: {err}"))
+        AppError::internal(format!(
+            "users.register failed to set identity in session: {err}"
+        ))
     })?;
 
     Ok(HttpResponse::Created().body("User registered"))

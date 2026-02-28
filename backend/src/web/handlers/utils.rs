@@ -1,7 +1,7 @@
-use uuid::Uuid;
 use crate::domain::model::{Cursor, KeysetCursor, PaginationMode, RepoError, TagQuery};
 use crate::web::error::AppError;
 use crate::web::handlers::dto::{SearchCursorParams, SearchQueryParams};
+use uuid::Uuid;
 
 pub fn has_filters(tag_query: &TagQuery) -> bool {
     !(tag_query.must.is_empty() && tag_query.should.is_empty() && tag_query.must_not.is_empty())

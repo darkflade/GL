@@ -1,8 +1,8 @@
-use std::path::{PathBuf};
+use crate::domain::model::{FileID, RelativePath, StorageError};
 use actix_web::web::Bytes;
 use async_trait::async_trait;
 use futures_util::Stream;
-use crate::domain::model::{FileID, RelativePath, StorageError};
+use std::path::PathBuf;
 
 #[async_trait]
 pub trait FileStorage {
@@ -14,10 +14,9 @@ pub trait FileStorage {
     where
         S: Stream<Item = Result<Bytes, StorageError>> + Unpin + Send;
 
-
     async fn save_temp_file(
         &self,
         temp_path: PathBuf,
-        ext: Option<&str>
+        ext: Option<&str>,
     ) -> Result<(FileID, RelativePath), StorageError>;
 }

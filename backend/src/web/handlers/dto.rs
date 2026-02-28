@@ -1,5 +1,5 @@
-use serde::{Deserialize};
-use crate::domain::model::{PaginationMode, PostID, SearchPlaylistsResponse, TagQuery};
+use crate::domain::model::{PaginationMode, PostID, TagQuery};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct CreatePostMeta {
@@ -27,30 +27,4 @@ pub struct SearchCursorParams {
     pub last_id: Option<PostID>,
     pub last_score: Option<f64>,
     pub limit: Option<i64>,
-}
-
-impl Default for TagQuery {
-    fn default() -> Self {
-        Self{
-            must:       vec![],
-            should:     vec![],
-            must_not:   vec![],
-        }
-    }
-}
-
-impl Default for PaginationMode {
-    fn default() -> Self {
-        PaginationMode::Keyset
-    }
-}
-
-impl Default for SearchPlaylistsResponse {
-    fn default() -> Self {
-        Self{
-            playlists: vec![],
-            has_next: false,
-            next_cursor: None,
-        }
-    }
 }

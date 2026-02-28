@@ -1,17 +1,19 @@
-use actix_identity::Identity;
-use actix_web::{HttpResponse, web};
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
-use crate::domain::model::{KeysetCursor, PaginationMode, SearchPlaylistsResponse};
-use crate::domain::repository::{FileRepository, PlaylistRepository, PostRepository, TagRepository};
+use crate::domain::model::{PaginationMode, PlaylistQuery};
+use crate::domain::repository::{
+    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+};
 use crate::web::error::AppError;
 use crate::web::handlers::dto::SearchQueryParams;
 use crate::web::handlers::utils::{has_filters, map_repo_error, parse_uuid};
+use actix_identity::Identity;
+use actix_web::{HttpResponse, web};
 
 pub async fn get_my_playlists<PR, PLR, TR, FR, FS>(
-    services:       web::Data<Services<PR, PLR, TR, FR, FS>>,
-    user:           Option<Identity>,
-    query:          web::Json<SearchQueryParams>,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    user: Option<Identity>,
+    query: web::Json<SearchQueryParams>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -20,7 +22,6 @@ where
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
-    
     let user_id_str = match user {
         Some(u) => u.id().map_err(|err| {
             log::warn!("failed to resolve identity id from session: {err}");
@@ -33,6 +34,10 @@ where
 
     let tag_query = query.tag_query.clone().unwrap_or_default();
     let text_query = query.text_query.clone().unwrap_or_default();
+    let playlist_query: PlaylistQuery = PlaylistQuery {
+        tags: tag_query.clone(),
+        text: text_query.clone(),
+    };
 
     let cursor = query.cursor.clone().unwrap_or_default();
     let cursor_mode = cursor.mode.clone().unwrap_or_default();
@@ -40,24 +45,33 @@ where
     match cursor_mode {
         PaginationMode::Keyset => {
             if text_query.is_empty() && !has_filters(&tag_query) {
-                let playlists = services.get_all_playlists
+                let playlists = services
+                    .get_all_playlists
                     .execute(user_uuid, cursor.into())
                     .await
-                    .map_err(|err| map_repo_error(err, "Playlists not found", "posts.search"))?;
+                    .map_err(|err| {
+                        map_repo_error(err, "Playlists not found", "playlists.search")
+                    })?;
 
-                Ok(HttpResponse::Ok().json(playlists))
+                return Ok(HttpResponse::Ok().json(playlists));
             }
 
-        }
-        PaginationMode::Offset => {
-            Err(AppError::BadRequest("Offset mode doesn't support in playlist".to_string()))
-        }
-    }
+            let playlists = services
+                .search_playlists
+                .execute(user_uuid, playlist_query, cursor.into())
+                .await
+                .map_err(|err| map_repo_error(err, "Playlists not found", "playlists.search"))?;
 
+            Ok(HttpResponse::Ok().json(playlists))
+        }
+        PaginationMode::Offset => Err(AppError::BadRequest(
+            "Offset mode doesn't support in playlist".to_string(),
+        )),
+    }
 }
 pub async fn create_playlist<PR, PLR, TR, FR, FS>(
-    services:       web::Data<Services<PR, PLR, TR, FR, FS>>,
-    user:           Option<Identity>,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    user: Option<Identity>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -69,8 +83,8 @@ where
     Ok(HttpResponse::Ok().body("success"))
 }
 pub async fn get_playlist_details<PR, PLR, TR, FR, FS>(
-    services:       web::Data<Services<PR, PLR, TR, FR, FS>>,
-    user:           Option<Identity>,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    user: Option<Identity>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -82,8 +96,8 @@ where
     Ok(HttpResponse::Ok().body("success"))
 }
 pub async fn delete_playlist<PR, PLR, TR, FR, FS>(
-    services:       web::Data<Services<PR, PLR, TR, FR, FS>>,
-    user:           Option<Identity>,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    user: Option<Identity>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
