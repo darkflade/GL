@@ -1,4 +1,6 @@
-use crate::application::contracts::{PaginationMode, PlaylistQuery, TagQuery};
+use crate::application::contracts::{
+    NewPlaylist, PaginationMode, PlaylistQuery, TagQuery, UpdatePlaylist,
+};
 use crate::application::ports::{
     FileRepository, PlaylistRepository, PostRepository, TagRepository,
 };
@@ -75,8 +77,9 @@ where
     }
 }
 pub async fn create_playlist<PR, PLR, TR, FR, FS>(
-    _services: web::Data<Services<PR, PLR, TR, FR, FS>>,
-    _user: Option<Identity>,
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    user: Option<Identity>,
+    payload: web::Json<NewPlaylist>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
@@ -85,7 +88,15 @@ where
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
-    Ok(HttpResponse::Ok().body("success"))
+    let user_id = resolve_user_id(user)?;
+
+    let playlist_id = services
+        .create_playlist
+        .execute(user_id, payload.into_inner())
+        .await
+        .map_err(|err| map_repo_error(err, "Failed to create playlist", "playlists.create"))?;
+
+    Ok(HttpResponse::Created().json(playlist_id))
 }
 pub async fn get_playlist_details<PR, PLR, TR, FR, FS>(
     services: web::Data<Services<PR, PLR, TR, FR, FS>>,
@@ -131,6 +142,31 @@ where
         .execute(user_id, playlist_id)
         .await
         .map_err(|err| map_repo_error(err, "Playlist not found", "playlists.delete"))?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn update_playlist<PR, PLR, TR, FR, FS>(
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    user: Option<Identity>,
+    path: web::Path<String>,
+    payload: web::Json<UpdatePlaylist>,
+) -> Result<HttpResponse, AppError>
+where
+    PR: PostRepository + Clone,
+    PLR: PlaylistRepository + Clone,
+    TR: TagRepository + Clone,
+    FR: FileRepository + Clone,
+    FS: FileStorage + Clone,
+{
+    let user_id = resolve_user_id(user)?;
+    let playlist_id = parse_uuid(&path.into_inner(), "playlist id")?;
+
+    services
+        .update_playlist
+        .execute(user_id, playlist_id, payload.into_inner())
+        .await
+        .map_err(|err| map_repo_error(err, "Playlist not found", "playlists.update"))?;
 
     Ok(HttpResponse::NoContent().finish())
 }

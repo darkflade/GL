@@ -1,9 +1,9 @@
 use crate::application::contracts::{
     Cursor, KeysetCursor, KeysetDirection, KeysetPageCursor, NewPost, PaginationMode,
-    SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
+    SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery, UpdatePost,
 };
 use crate::application::ports::PostRepository;
-use crate::domain::model::{Post, PostID, RepoError, Tag, TagID};
+use crate::domain::model::{Post, PostID, RepoError, Tag};
 use crate::storage::postgres::dto::{FileResponse, TagResponse};
 use async_trait::async_trait;
 use sqlx::PgPool;
@@ -104,8 +104,7 @@ impl PostgresPostRepository {
 
 #[async_trait]
 impl PostRepository for PostgresPostRepository {
-    // Todo
-    async fn create(&self, post: NewPost, tag_ids: &[TagID]) -> Result<PostID, RepoError> {
+    async fn create(&self, post: NewPost) -> Result<PostID, RepoError> {
         let mut tx = self.pool.begin().await.map_err(|err| {
             log::error!("posts.create failed to begin transaction: {err}");
             RepoError::StorageError
@@ -124,7 +123,7 @@ impl PostRepository for PostgresPostRepository {
             RepoError::StorageError
         })?;
 
-        for tag_id in tag_ids {
+        for tag_id in &post.tag_ids {
             sqlx::query!(
                 "INSERT INTO post_tags (post_id, tag_id) VALUES ($1, $2)",
                 post.id,
@@ -212,8 +211,120 @@ impl PostRepository for PostgresPostRepository {
         })
     }
 
-    async fn update(&self, id: PostID, update_post: Post) -> Result<(), RepoError> {
-        log::debug!("update post {}, {}", id, update_post.title);
+    async fn update(&self, id: PostID, update_post: UpdatePost) -> Result<(), RepoError> {
+        let mut tx = self.pool.begin().await.map_err(|err| {
+            log::error!("posts.update failed to begin transaction for {}: {err}", id);
+            RepoError::StorageError
+        })?;
+
+        let exists = sqlx::query!("SELECT id FROM posts WHERE id = $1", id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|err| {
+                log::error!("posts.update failed to check post {} existence: {err}", id);
+                RepoError::StorageError
+            })?;
+
+        if exists.is_none() {
+            return Err(RepoError::NotFound);
+        }
+
+        if update_post.title.is_some() || update_post.description.is_some() {
+            sqlx::query!(
+                r#"
+                UPDATE posts
+                SET
+                    title = COALESCE($2, title),
+                    description = COALESCE($3, description),
+                    updated_at = NOW()
+                WHERE id = $1
+                "#,
+                id,
+                update_post.title,
+                update_post.description
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| {
+                log::error!(
+                    "posts.update failed to update base fields for {}: {err}",
+                    id
+                );
+                RepoError::StorageError
+            })?;
+        }
+
+        if let Some(tag_ids) = update_post.tag_ids {
+            sqlx::query!("DELETE FROM post_tags WHERE post_id = $1", id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!("posts.update failed to clear tags for {}: {err}", id);
+                    RepoError::StorageError
+                })?;
+
+            for tag_id in tag_ids {
+                sqlx::query!(
+                    "INSERT INTO post_tags (post_id, tag_id) VALUES ($1, $2)",
+                    id,
+                    tag_id
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!(
+                        "posts.update failed to attach tag {} to {}: {err}",
+                        tag_id,
+                        id
+                    );
+                    RepoError::StorageError
+                })?;
+            }
+        }
+
+        if let Some(notes) = update_post.notes {
+            sqlx::query!("DELETE FROM post_notes WHERE post_id = $1", id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!("posts.update failed to clear notes for {}: {err}", id);
+                    RepoError::StorageError
+                })?;
+
+            for note in notes {
+                let note_id = note.id.unwrap_or_else(Uuid::now_v7);
+                sqlx::query!(
+                    r#"
+                    INSERT INTO post_notes (id, post_id, text, pos_x, pos_y)
+                    VALUES ($1, $2, $3, $4, $5)
+                    "#,
+                    note_id,
+                    id,
+                    note.text,
+                    note.x,
+                    note.y
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!(
+                        "posts.update failed to insert note {} for {}: {err}",
+                        note_id,
+                        id
+                    );
+                    RepoError::StorageError
+                })?;
+            }
+        }
+
+        tx.commit().await.map_err(|err| {
+            log::error!(
+                "posts.update failed to commit transaction for {}: {err}",
+                id
+            );
+            RepoError::StorageError
+        })?;
+
         Ok(())
     }
 
@@ -327,6 +438,7 @@ impl PostRepository for PostgresPostRepository {
                     description: r.description,
                     file: r.file.0.into(),
                     tags: r.tags.0.into_iter().map(Tag::from).collect(),
+                    //TODO return notes
                     notes: vec![],
                 })
                 .collect(),
@@ -400,6 +512,7 @@ impl PostRepository for PostgresPostRepository {
                     file: r.file.0.into(),
                     description: r.description,
                     tags: r.tags.0.into_iter().map(Tag::from).collect(),
+                    //TODO load notes
                     notes: vec![],
                 })
                 .collect(),
@@ -511,6 +624,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                //TODO load notes
                                 notes: vec![],
                             },
                             row.should_score as f64,
@@ -604,6 +718,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                //TODO load notes
                                 notes: vec![],
                             },
                             row.should_score as f64,
@@ -696,6 +811,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                //TODO load notes
                                 notes: vec![],
                             },
                             row.should_score as f64,
@@ -758,6 +874,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
+                                //TODO load notes
                                 notes: vec![],
                             },
                             row.should_score as f64,

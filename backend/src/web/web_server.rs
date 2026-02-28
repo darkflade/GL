@@ -5,9 +5,9 @@ use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
 use crate::web::handlers::files::download_file;
 use crate::web::handlers::playlists::{
-    create_playlist, delete_playlist, get_my_playlists, get_playlist_details,
+    create_playlist, delete_playlist, get_my_playlists, get_playlist_details, update_playlist,
 };
-use crate::web::handlers::posts::{create_post, delete_post, get_post, search_posts};
+use crate::web::handlers::posts::{create_post, delete_post, get_post, search_posts, update_post};
 use crate::web::handlers::tags::search_tags;
 use crate::web::handlers::users::{get_current_user, login_user, logout_user, register_user};
 use actix_identity::IdentityMiddleware;
@@ -80,6 +80,10 @@ where
                             .route(
                                 "/{id}",
                                 web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>),
+                            )
+                            .route(
+                                "/{id}",
+                                web::patch().to(update_playlist::<PR, PLR, TR, FR, FS>),
                             ),
                     )
                     .service(
@@ -93,11 +97,12 @@ where
                             .route(
                                 "/{id}",
                                 web::delete().to(delete_post::<PR, PLR, TR, FR, FS>),
-                            ),
+                            )
+                            .route("/{id}", web::patch().to(update_post::<PR, PLR, TR, FR, FS>)),
                     )
                     .service(
                         web::scope("/tags")
-                            .route("/search", web::get().to(search_tags::<PR, PLR, TR, FR, FS>)), //TODO register get or create or delete it
+                            .route("/search", web::get().to(search_tags::<PR, PLR, TR, FR, FS>)),
                     )
                     .service(
                         web::scope("/files")

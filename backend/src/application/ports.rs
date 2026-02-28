@@ -1,18 +1,19 @@
 use crate::application::contracts::{
-    Cursor, KeysetCursor, NewPost, NewTag, NewUser, PlaylistQuery, SearchPlaylistsResponse,
-    SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
+    Cursor, KeysetCursor, NewPlaylist, NewPost, NewTag, NewUser, PlaylistQuery,
+    SearchPlaylistsResponse, SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
+    UpdatePlaylist, UpdatePost,
 };
 use crate::domain::model::{
-    File, FileID, Playlist, PlaylistID, Post, PostID, RepoError, Tag, TagID, User, UserID,
+    File, FileID, Playlist, PlaylistID, Post, PostID, RepoError, Tag, User, UserID,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
 
 #[async_trait]
 pub trait PostRepository: Send + Sync {
-    async fn create(&self, post: NewPost, tag_ids: &[TagID]) -> Result<PostID, RepoError>;
+    async fn create(&self, post: NewPost) -> Result<PostID, RepoError>;
     async fn get(&self, id: PostID) -> Result<Post, RepoError>;
-    async fn update(&self, id: PostID, update_post: Post) -> Result<(), RepoError>;
+    async fn update(&self, id: PostID, update_post: UpdatePost) -> Result<(), RepoError>;
     async fn delete(&self, id: PostID) -> Result<(), RepoError>;
     async fn search(
         &self,
@@ -33,12 +34,17 @@ pub trait PostRepository: Send + Sync {
 
 #[async_trait]
 pub trait PlaylistRepository: Send + Sync {
+    async fn create(
+        &self,
+        user_id: UserID,
+        new_playlist: NewPlaylist,
+    ) -> Result<PlaylistID, RepoError>;
     async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError>;
     async fn update(
         &self,
         user_id: UserID,
         id: PlaylistID,
-        update_playlist: Playlist,
+        update_playlist: UpdatePlaylist,
     ) -> Result<(), RepoError>;
     async fn delete(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<(), RepoError>;
     async fn search(

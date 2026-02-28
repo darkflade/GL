@@ -17,7 +17,8 @@
     - /files/<uuid>.ext, 
     - /thumbs/<uuid>.webp
   Logic as files for get
-[ ] Cursor return previous
+### Prob
+[x] Cursor return previous
 
 ## Secodary
 [ ] Logger(made some improvments) 
@@ -29,7 +30,7 @@
 [ ] Health checks
 
 ### Optionaly  
-[ ] D 
+[ ] Workers for magic bytes/phash/md5
 [ ] Metrics & monitoring
   Backend: Prometheus + Grafana (expose /metrics via prometheus crate).
   Error tracking: Sentry.

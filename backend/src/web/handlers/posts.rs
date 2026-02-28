@@ -1,4 +1,4 @@
-use crate::application::contracts::{Cursor, KeysetCursor, NewTag, PaginationMode};
+use crate::application::contracts::{Cursor, KeysetCursor, NewTag, PaginationMode, UpdatePost};
 use crate::application::ports::{
     FileRepository, PlaylistRepository, PostRepository, TagRepository,
 };
@@ -222,6 +222,29 @@ where
         .execute(id)
         .await
         .map_err(|err| map_repo_error(err, "Post not found", "posts.delete"))?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn update_post<PR, PLR, TR, FR, FS>(
+    services: web::Data<Services<PR, PLR, TR, FR, FS>>,
+    path: web::Path<String>,
+    payload: web::Json<UpdatePost>,
+) -> Result<HttpResponse, AppError>
+where
+    PR: PostRepository + Clone,
+    PLR: PlaylistRepository + Clone,
+    TR: TagRepository + Clone,
+    FR: FileRepository + Clone,
+    FS: FileStorage + Clone,
+{
+    let id = parse_uuid(&path.into_inner(), "post id")?;
+
+    services
+        .update_post
+        .execute(id, payload.into_inner())
+        .await
+        .map_err(|err| map_repo_error(err, "Post not found", "posts.update"))?;
 
     Ok(HttpResponse::NoContent().finish())
 }

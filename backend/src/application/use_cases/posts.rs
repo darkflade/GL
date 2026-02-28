@@ -1,6 +1,6 @@
 use crate::application::contracts::{
     Cursor, KeysetCursor, NewPost, NewTag, SearchPostsKeysetResponse, SearchPostsOffsetResponse,
-    TagQuery,
+    TagQuery, UpdatePost,
 };
 use crate::application::helpers::file_type_determinator::file_type_from_mime_and_ext;
 use crate::application::ports::{FileRepository, PostRepository, TagRepository};
@@ -63,9 +63,10 @@ impl<PR: PostRepository, TR: TagRepository, FR: FileRepository, FS: FileStorage>
             id: Uuid::now_v7(),
             title,
             file_id,
+            tag_ids,
         };
 
-        self.posts.create(new_post, &tag_ids).await
+        self.posts.create(new_post).await
     }
 }
 
@@ -78,6 +79,10 @@ pub struct GetPostUseCase<PR> {
 }
 
 pub struct DeletePostUseCase<PR> {
+    pub repo: PR,
+}
+
+pub struct UpdatePostUseCase<PR> {
     pub repo: PR,
 }
 
@@ -136,5 +141,11 @@ impl<PR: PostRepository> GetPostUseCase<PR> {
 impl<PR: PostRepository> DeletePostUseCase<PR> {
     pub async fn execute(&self, id: PostID) -> Result<(), RepoError> {
         self.repo.delete(id).await
+    }
+}
+
+impl<PR: PostRepository> UpdatePostUseCase<PR> {
+    pub async fn execute(&self, id: PostID, update_post: UpdatePost) -> Result<(), RepoError> {
+        self.repo.update(id, update_post).await
     }
 }

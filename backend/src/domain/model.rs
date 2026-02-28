@@ -146,7 +146,7 @@ pub struct StoredFile {
 pub struct Playlist {
     pub id: PlaylistID,
     pub title: String,
-    pub description: String,
+    pub description: Option<String>,
     pub tags: Vec<Tag>,
     pub cover: Option<FileID>,
     pub items: Vec<PlaylistItem>,

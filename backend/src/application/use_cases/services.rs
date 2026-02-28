@@ -3,11 +3,12 @@ use crate::application::ports::{
 };
 use crate::application::use_cases::files::GetFileUseCase;
 use crate::application::use_cases::playlists::{
-    DeletePlaylistUseCase, GetAllPlaylistsUseCase, GetPlaylistUseCase, SearchPlaylistsUseCase,
+    CreatePlaylistUseCase, DeletePlaylistUseCase, GetAllPlaylistsUseCase, GetPlaylistUseCase,
+    SearchPlaylistsUseCase, UpdatePlaylistUseCase,
 };
 use crate::application::use_cases::posts::{
     CreatePostUseCase, DeletePostUseCase, GetAllPostsKeysetUseCase, GetAllPostsUseCase,
-    GetPostUseCase, SearchPostsKeysetUseCase, SearchPostsUseCase,
+    GetPostUseCase, SearchPostsKeysetUseCase, SearchPostsUseCase, UpdatePostUseCase,
 };
 use crate::application::use_cases::tags::SearchTagsUseCase;
 use crate::domain::files::FileStorage;
@@ -18,11 +19,14 @@ pub struct Services<PR, PLR, TR, FR, FS> {
     pub search_posts_keyset: SearchPostsKeysetUseCase<PR>,
     pub get_post: GetPostUseCase<PR>,
     pub delete_post: DeletePostUseCase<PR>,
+    pub update_post: UpdatePostUseCase<PR>,
     pub get_all_posts: GetAllPostsUseCase<PR>,
     pub get_all_posts_keyset: GetAllPostsKeysetUseCase<PR>,
     //  Playlists
     pub get_playlist: GetPlaylistUseCase<PLR>,
+    pub create_playlist: CreatePlaylistUseCase<PLR>,
     pub delete_playlist: DeletePlaylistUseCase<PLR>,
+    pub update_playlist: UpdatePlaylistUseCase<PLR>,
     pub search_playlists: SearchPlaylistsUseCase<PLR>,
     pub get_all_playlists: GetAllPlaylistsUseCase<PLR>,
     //  Tags
@@ -54,6 +58,9 @@ where
             delete_post: DeletePostUseCase {
                 repo: posts.clone(),
             },
+            update_post: UpdatePostUseCase {
+                repo: posts.clone(),
+            },
             get_all_posts: GetAllPostsUseCase {
                 repo: posts.clone(),
             },
@@ -70,7 +77,13 @@ where
             get_playlist: GetPlaylistUseCase {
                 repo: playlist.clone(),
             },
+            create_playlist: CreatePlaylistUseCase {
+                repo: playlist.clone(),
+            },
             delete_playlist: DeletePlaylistUseCase {
+                repo: playlist.clone(),
+            },
+            update_playlist: UpdatePlaylistUseCase {
                 repo: playlist.clone(),
             },
             search_playlists: SearchPlaylistsUseCase {

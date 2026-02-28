@@ -1,6 +1,6 @@
 use crate::application::contracts::{
-    KeysetCursor, KeysetDirection, KeysetPageCursor, PaginationMode, PlaylistQuery,
-    SearchPlaylistsResponse,
+    KeysetCursor, KeysetDirection, KeysetPageCursor, NewPlaylist, NewPlaylistItemContent,
+    PaginationMode, PlaylistQuery, SearchPlaylistsResponse, UpdatePlaylist,
 };
 use crate::application::ports::PlaylistRepository;
 use crate::domain::model::{
@@ -121,6 +121,7 @@ impl PostgresPlaylistRepository {
                         description: post.description,
                         tags: post.tags.into_iter().map(Tag::from).collect(),
                         file: post.file.into(),
+                        //TODO load notes
                         notes: vec![],
                     }),
                     None => PlaylistContent::Note(item.note.unwrap_or_default()),
@@ -138,13 +139,139 @@ impl PostgresPlaylistRepository {
 
 #[async_trait]
 impl PlaylistRepository for PostgresPlaylistRepository {
+    async fn create(
+        &self,
+        user_id: UserID,
+        new_playlist: NewPlaylist,
+    ) -> Result<PlaylistID, RepoError> {
+        let mut tx = self.pool.begin().await.map_err(|err| {
+            log::error!("playlists.create failed to begin transaction: {err}");
+            RepoError::StorageError
+        })?;
+
+        let playlist_id = Uuid::now_v7();
+
+        sqlx::query!(
+            r#"
+            INSERT INTO playlists (id, title, description, cover_file_id, owner_id)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            playlist_id,
+            new_playlist.title,
+            new_playlist.description,
+            new_playlist.cover,
+            user_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            log::error!(
+                "playlists.create failed to insert playlist {} for {}: {err}",
+                playlist_id,
+                user_id
+            );
+            RepoError::StorageError
+        })?;
+
+        if let Some(tag_ids) = new_playlist.tag_ids {
+            for tag_id in tag_ids {
+                sqlx::query!(
+                    "INSERT INTO playlist_tags (playlist_id, tag_id) VALUES ($1, $2)",
+                    playlist_id,
+                    tag_id
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!(
+                        "playlists.create failed to attach tag {} to {}: {err}",
+                        tag_id,
+                        playlist_id
+                    );
+                    RepoError::StorageError
+                })?;
+            }
+        }
+
+        if let Some(items) = new_playlist.items {
+            for item in items {
+                let position = i32::try_from(item.position).map_err(|err| {
+                    log::error!(
+                        "playlists.create invalid item position {} for {}: {err}",
+                        item.position,
+                        playlist_id
+                    );
+                    RepoError::StorageError
+                })?;
+                let item_id = Uuid::now_v7();
+
+                match item.content {
+                    NewPlaylistItemContent::Post { post_id } => {
+                        sqlx::query!(
+                            r#"
+                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
+                            VALUES ($1, $2, $3, $4, NULL)
+                            "#,
+                            item_id,
+                            playlist_id,
+                            position,
+                            post_id
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|err| {
+                            log::error!(
+                                "playlists.create failed to insert post item {} for {}: {err}",
+                                item_id,
+                                playlist_id
+                            );
+                            RepoError::StorageError
+                        })?;
+                    }
+                    NewPlaylistItemContent::Note { text } => {
+                        sqlx::query!(
+                            r#"
+                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
+                            VALUES ($1, $2, $3, NULL, $4)
+                            "#,
+                            item_id,
+                            playlist_id,
+                            position,
+                            text
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|err| {
+                            log::error!(
+                                "playlists.create failed to insert note item {} for {}: {err}",
+                                item_id,
+                                playlist_id
+                            );
+                            RepoError::StorageError
+                        })?;
+                    }
+                }
+            }
+        }
+
+        tx.commit().await.map_err(|err| {
+            log::error!(
+                "playlists.create failed to commit transaction for {}: {err}",
+                playlist_id
+            );
+            RepoError::StorageError
+        })?;
+
+        Ok(playlist_id)
+    }
+
     async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError> {
         let row = sqlx::query!(
             r#"
             SELECT
                 pl.id,
                 pl.title,
-                COALESCE(pl.description, '') AS "description!",
+                pl.description,
                 pl.cover_file_id AS cover,
                 COALESCE(
                     (
@@ -246,9 +373,184 @@ impl PlaylistRepository for PostgresPlaylistRepository {
         &self,
         user_id: UserID,
         playlist_id: PlaylistID,
-        _update_playlist: Playlist,
+        update_playlist: UpdatePlaylist,
     ) -> Result<(), RepoError> {
-        log::debug!("update playlist {}, {}", user_id, playlist_id);
+        let mut tx = self.pool.begin().await.map_err(|err| {
+            log::error!(
+                "playlists.update failed to begin transaction for {}: {err}",
+                playlist_id
+            );
+            RepoError::StorageError
+        })?;
+
+        let exists = sqlx::query!(
+            "SELECT id FROM playlists WHERE id = $1 AND owner_id = $2",
+            playlist_id,
+            user_id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|err| {
+            log::error!(
+                "playlists.update failed to check playlist {} ownership for {}: {err}",
+                playlist_id,
+                user_id
+            );
+            RepoError::StorageError
+        })?;
+
+        if exists.is_none() {
+            return Err(RepoError::NotFound);
+        }
+
+        if update_playlist.title.is_some()
+            || update_playlist.description.is_some()
+            || update_playlist.cover.is_some()
+        {
+            sqlx::query!(
+                r#"
+                UPDATE playlists
+                SET
+                    title = COALESCE($3, title),
+                    description = COALESCE($4, description),
+                    cover_file_id = COALESCE($5, cover_file_id),
+                    updated_at = NOW()
+                WHERE id = $1 AND owner_id = $2
+                "#,
+                playlist_id,
+                user_id,
+                update_playlist.title,
+                update_playlist.description,
+                update_playlist.cover
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| {
+                log::error!(
+                    "playlists.update failed to update base fields for {}: {err}",
+                    playlist_id
+                );
+                RepoError::StorageError
+            })?;
+        }
+
+        if let Some(tag_ids) = update_playlist.tag_ids {
+            sqlx::query!(
+                "DELETE FROM playlist_tags WHERE playlist_id = $1",
+                playlist_id
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| {
+                log::error!(
+                    "playlists.update failed to clear tags for {}: {err}",
+                    playlist_id
+                );
+                RepoError::StorageError
+            })?;
+
+            for tag_id in tag_ids {
+                sqlx::query!(
+                    "INSERT INTO playlist_tags (playlist_id, tag_id) VALUES ($1, $2)",
+                    playlist_id,
+                    tag_id
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!(
+                        "playlists.update failed to attach tag {} to {}: {err}",
+                        tag_id,
+                        playlist_id
+                    );
+                    RepoError::StorageError
+                })?;
+            }
+        }
+
+        if let Some(items) = update_playlist.items {
+            sqlx::query!(
+                "DELETE FROM playlist_items WHERE playlist_id = $1",
+                playlist_id
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| {
+                log::error!(
+                    "playlists.update failed to clear items for {}: {err}",
+                    playlist_id
+                );
+                RepoError::StorageError
+            })?;
+
+            for item in items {
+                let position = i32::try_from(item.position).map_err(|err| {
+                    log::error!(
+                        "playlists.update invalid item position {} for {}: {err}",
+                        item.position,
+                        playlist_id
+                    );
+                    RepoError::StorageError
+                })?;
+                let item_id = Uuid::now_v7();
+
+                match item.content {
+                    NewPlaylistItemContent::Post { post_id } => {
+                        sqlx::query!(
+                            r#"
+                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
+                            VALUES ($1, $2, $3, $4, NULL)
+                            "#,
+                            item_id,
+                            playlist_id,
+                            position,
+                            post_id
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|err| {
+                            log::error!(
+                                "playlists.update failed to insert post item {} for {}: {err}",
+                                item_id,
+                                playlist_id
+                            );
+                            RepoError::StorageError
+                        })?;
+                    }
+                    NewPlaylistItemContent::Note { text } => {
+                        sqlx::query!(
+                            r#"
+                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
+                            VALUES ($1, $2, $3, NULL, $4)
+                            "#,
+                            item_id,
+                            playlist_id,
+                            position,
+                            text
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|err| {
+                            log::error!(
+                                "playlists.update failed to insert note item {} for {}: {err}",
+                                item_id,
+                                playlist_id
+                            );
+                            RepoError::StorageError
+                        })?;
+                    }
+                }
+            }
+        }
+
+        tx.commit().await.map_err(|err| {
+            log::error!(
+                "playlists.update failed to commit transaction for {}: {err}",
+                playlist_id
+            );
+            RepoError::StorageError
+        })?;
+
         Ok(())
     }
 
