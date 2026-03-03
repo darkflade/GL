@@ -4,6 +4,8 @@
   Endpoints: DELETE /posts/:id, PATCH /posts/:id, POST /tags, PATCH /tags/:id, DELETE /tags/:id.
   Post deleting: transaction post_tags, tags.post_count--, create task for deleting, delete from playlist.
 
+[ ] Make for playlist editing (tag/name, playlist content) Event system
+
 [ ] Playlists system
   Index: (playlist_id, position)
   For reorder: get some space (start 1024). Ends — реassign positions.

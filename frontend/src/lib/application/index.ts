@@ -4,3 +4,6 @@ export * from "$lib/application/ports/playlists-repository";
 export * from "$lib/application/use-cases/search-posts";
 export * from "$lib/application/use-cases/search-tags";
 export * from "$lib/application/use-cases/search-playlists";
+export * from "$lib/application/use-cases/get-playlist";
+export * from "$lib/application/use-cases/create-playlist";
+export * from "$lib/application/use-cases/update-playlist";

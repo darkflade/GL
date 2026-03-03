@@ -1,17 +1,17 @@
 use crate::application::contracts::{
     KeysetCursor, KeysetDirection, KeysetPageCursor, NewPlaylist, NewPlaylistItemContent,
-    PaginationMode, PlaylistQuery, SearchPlaylistsResponse, UpdatePlaylist,
+    PaginationMode, PlaylistItemEvent, PlaylistQuery, SearchPlaylistsResponse, UpdatePlaylist,
 };
 use crate::application::ports::PlaylistRepository;
 use crate::domain::model::{
     Playlist, PlaylistContent, PlaylistID, PlaylistItem, PlaylistSummary, Post, RepoError, Tag,
     UserID,
 };
-use crate::storage::postgres::dto::{FileResponse, TagResponse};
+use crate::storage::postgres::dto::{FileResponse, PostNoteResponse, TagResponse};
 use async_trait::async_trait;
 use serde::Deserialize;
-use sqlx::PgPool;
 use sqlx::types::Json;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -22,9 +22,15 @@ pub struct PostgresPlaylistRepository {
 #[derive(Debug, Deserialize)]
 struct PlaylistItemPayload {
     id: Uuid,
-    position: i32,
+    position: i64,
     post: Option<PlaylistPostPayload>,
     note: Option<String>,
+}
+
+#[derive(Debug)]
+struct PlaylistItemRank {
+    id: Uuid,
+    rank: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,11 +40,15 @@ struct PlaylistPostPayload {
     description: Option<String>,
     file: FileResponse,
     tags: Vec<TagResponse>,
+    notes: Vec<PostNoteResponse>,
 }
 
 impl PostgresPlaylistRepository {
     const DEFAULT_KEYSET_LIMIT: i64 = 30;
     const MAX_KEYSET_LIMIT: i64 = 100;
+    const RANK_ALPHABET: &'static [u8; 64] =
+        b"-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+    const MAX_RANK_DEPTH: usize = 128;
 
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -110,6 +120,265 @@ impl PostgresPlaylistRepository {
         }
     }
 
+    fn rank_char_to_digit(ch: u8) -> Option<u8> {
+        Self::RANK_ALPHABET
+            .iter()
+            .position(|c| *c == ch)
+            .map(|idx| idx as u8)
+    }
+
+    fn rank_digit_to_char(digit: u8) -> u8 {
+        Self::RANK_ALPHABET[digit as usize]
+    }
+
+    fn rank_digit_at(bound: Option<&str>, idx: usize, fallback: u8) -> Result<u8, RepoError> {
+        match bound {
+            Some(value) => match value.as_bytes().get(idx).copied() {
+                Some(ch) => Self::rank_char_to_digit(ch).ok_or_else(|| {
+                    log::error!(
+                        "playlists.rank contains unsupported character: {}",
+                        ch as char
+                    );
+                    RepoError::StorageError
+                }),
+                None => Ok(fallback),
+            },
+            None => Ok(fallback),
+        }
+    }
+
+    fn rank_between(prev: Option<&str>, next: Option<&str>) -> Result<String, RepoError> {
+        if let (Some(prev_rank), Some(next_rank)) = (prev, next) {
+            if prev_rank >= next_rank {
+                log::error!(
+                    "playlists.rank invalid bounds: prev_rank={} next_rank={}",
+                    prev_rank,
+                    next_rank
+                );
+                return Err(RepoError::StorageError);
+            }
+        }
+
+        let min_digit = 0_u8;
+        let max_digit = (Self::RANK_ALPHABET.len() - 1) as u8;
+        let mut output = Vec::new();
+
+        for idx in 0..Self::MAX_RANK_DEPTH {
+            let left = Self::rank_digit_at(prev, idx, min_digit)?;
+            let right = Self::rank_digit_at(next, idx, max_digit)?;
+
+            if left > right {
+                log::error!(
+                    "playlists.rank invalid digit range at idx {}: left={} right={}",
+                    idx,
+                    left,
+                    right
+                );
+                return Err(RepoError::StorageError);
+            }
+
+            if left + 1 < right {
+                let middle = left + (right - left) / 2;
+                output.push(Self::rank_digit_to_char(middle));
+                return String::from_utf8(output).map_err(|err| {
+                    log::error!("playlists.rank failed to encode utf8 output: {err}");
+                    RepoError::StorageError
+                });
+            }
+
+            output.push(Self::rank_digit_to_char(left));
+        }
+
+        log::error!("playlists.rank failed to allocate an in-between rank (depth exceeded)");
+        Err(RepoError::StorageError)
+    }
+
+    async fn insert_playlist_item(
+        tx: &mut Transaction<'_, Postgres>,
+        playlist_id: PlaylistID,
+        rank: &str,
+        content: NewPlaylistItemContent,
+    ) -> Result<Uuid, RepoError> {
+        let item_id = Uuid::now_v7();
+        match content {
+            NewPlaylistItemContent::Post { post_id } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO playlist_items (id, playlist_id, rank, post_id, note_text)
+                    VALUES ($1, $2, $3, $4, NULL)
+                    "#,
+                    item_id,
+                    playlist_id,
+                    rank,
+                    post_id
+                )
+                .execute(&mut **tx)
+                .await
+                .map_err(|err| {
+                    log::error!(
+                        "playlists.item.insert failed to insert post item {} for {}: {err}",
+                        item_id,
+                        playlist_id
+                    );
+                    RepoError::StorageError
+                })?;
+            }
+            NewPlaylistItemContent::Note { text } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO playlist_items (id, playlist_id, rank, post_id, note_text)
+                    VALUES ($1, $2, $3, NULL, $4)
+                    "#,
+                    item_id,
+                    playlist_id,
+                    rank,
+                    text
+                )
+                .execute(&mut **tx)
+                .await
+                .map_err(|err| {
+                    log::error!(
+                        "playlists.item.insert failed to insert note item {} for {}: {err}",
+                        item_id,
+                        playlist_id
+                    );
+                    RepoError::StorageError
+                })?;
+            }
+        }
+
+        Ok(item_id)
+    }
+
+    async fn edit_playlist_item_content(
+        tx: &mut Transaction<'_, Postgres>,
+        playlist_id: PlaylistID,
+        item_id: Uuid,
+        content: NewPlaylistItemContent,
+    ) -> Result<(), RepoError> {
+        let result = match content {
+            NewPlaylistItemContent::Post { post_id } => sqlx::query!(
+                r#"
+                    UPDATE playlist_items
+                    SET post_id = $3, note_text = NULL
+                    WHERE id = $1 AND playlist_id = $2
+                    "#,
+                item_id,
+                playlist_id,
+                post_id
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|err| {
+                log::error!(
+                    "playlists.item.edit failed to update post content for {} in {}: {err}",
+                    item_id,
+                    playlist_id
+                );
+                RepoError::StorageError
+            })?,
+            NewPlaylistItemContent::Note { text } => sqlx::query!(
+                r#"
+                    UPDATE playlist_items
+                    SET post_id = NULL, note_text = $3
+                    WHERE id = $1 AND playlist_id = $2
+                    "#,
+                item_id,
+                playlist_id,
+                text
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|err| {
+                log::error!(
+                    "playlists.item.edit failed to update note content for {} in {}: {err}",
+                    item_id,
+                    playlist_id
+                );
+                RepoError::StorageError
+            })?,
+        };
+
+        if result.rows_affected() == 0 {
+            return Err(RepoError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn fetch_item_ranks(
+        tx: &mut Transaction<'_, Postgres>,
+        playlist_id: PlaylistID,
+    ) -> Result<Vec<PlaylistItemRank>, RepoError> {
+        sqlx::query!(
+            r#"
+            SELECT id, rank
+            FROM playlist_items
+            WHERE playlist_id = $1
+            ORDER BY rank ASC
+            "#,
+            playlist_id
+        )
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|err| {
+            log::error!(
+                "playlists.item.fetch failed to load item ranks for {}: {err}",
+                playlist_id
+            );
+            RepoError::StorageError
+        })
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| PlaylistItemRank {
+                    id: row.id,
+                    rank: row.rank,
+                })
+                .collect()
+        })
+    }
+
+    fn resolve_rank_window(
+        playlist_id: PlaylistID,
+        ordered_items: &[PlaylistItemRank],
+        after_id: Option<Uuid>,
+        exclude_id: Option<Uuid>,
+    ) -> Result<(Option<String>, Option<String>), RepoError> {
+        let filtered: Vec<&PlaylistItemRank> = ordered_items
+            .iter()
+            .filter(|item| Some(item.id) != exclude_id)
+            .collect();
+
+        if filtered.is_empty() {
+            if after_id.is_some() {
+                log::error!(
+                    "playlists.rank.resolve cannot place after non-existing anchor in {}",
+                    playlist_id
+                );
+                return Err(RepoError::NotFound);
+            }
+            return Ok((None, None));
+        }
+
+        match after_id {
+            None => Ok((None, Some(filtered[0].rank.clone()))),
+            Some(anchor_id) => {
+                let anchor_index = filtered.iter().position(|item| item.id == anchor_id);
+                let Some(anchor_index) = anchor_index else {
+                    log::error!(
+                        "playlists.rank.resolve anchor {} not found in {}",
+                        anchor_id,
+                        playlist_id
+                    );
+                    return Err(RepoError::NotFound);
+                };
+                let prev = Some(filtered[anchor_index].rank.clone());
+                let next = filtered.get(anchor_index + 1).map(|item| item.rank.clone());
+                Ok((prev, next))
+            }
+        }
+    }
+
     fn map_playlist_items(items: Vec<PlaylistItemPayload>) -> Vec<PlaylistItem> {
         items
             .into_iter()
@@ -121,8 +390,7 @@ impl PostgresPlaylistRepository {
                         description: post.description,
                         tags: post.tags.into_iter().map(Tag::from).collect(),
                         file: post.file.into(),
-                        //TODO load notes
-                        notes: vec![],
+                        notes: post.notes.into_iter().map(Into::into).collect(),
                     }),
                     None => PlaylistContent::Note(item.note.unwrap_or_default()),
                 };
@@ -193,64 +461,14 @@ impl PlaylistRepository for PostgresPlaylistRepository {
             }
         }
 
-        if let Some(items) = new_playlist.items {
-            for item in items {
-                let position = i32::try_from(item.position).map_err(|err| {
-                    log::error!(
-                        "playlists.create invalid item position {} for {}: {err}",
-                        item.position,
-                        playlist_id
-                    );
-                    RepoError::StorageError
-                })?;
-                let item_id = Uuid::now_v7();
+        if let Some(mut items) = new_playlist.items {
+            items.sort_by_key(|item| item.position);
+            let mut prev_rank: Option<String> = None;
 
-                match item.content {
-                    NewPlaylistItemContent::Post { post_id } => {
-                        sqlx::query!(
-                            r#"
-                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
-                            VALUES ($1, $2, $3, $4, NULL)
-                            "#,
-                            item_id,
-                            playlist_id,
-                            position,
-                            post_id
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .map_err(|err| {
-                            log::error!(
-                                "playlists.create failed to insert post item {} for {}: {err}",
-                                item_id,
-                                playlist_id
-                            );
-                            RepoError::StorageError
-                        })?;
-                    }
-                    NewPlaylistItemContent::Note { text } => {
-                        sqlx::query!(
-                            r#"
-                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
-                            VALUES ($1, $2, $3, NULL, $4)
-                            "#,
-                            item_id,
-                            playlist_id,
-                            position,
-                            text
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .map_err(|err| {
-                            log::error!(
-                                "playlists.create failed to insert note item {} for {}: {err}",
-                                item_id,
-                                playlist_id
-                            );
-                            RepoError::StorageError
-                        })?;
-                    }
-                }
+            for item in items {
+                let rank = Self::rank_between(prev_rank.as_deref(), None)?;
+                Self::insert_playlist_item(&mut tx, playlist_id, &rank, item.content).await?;
+                prev_rank = Some(rank);
             }
         }
 
@@ -296,7 +514,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                         FROM (
                             SELECT jsonb_build_object(
                                 'id', pi.id,
-                                'position', pi.position,
+                                'position', ROW_NUMBER() OVER (ORDER BY pi.rank),
                                 'post',
                                 CASE
                                     WHEN pi.post_id IS NULL THEN NULL
@@ -328,6 +546,22 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                                                 WHERE ptt.post_id = p.id
                                             ),
                                             '[]'::jsonb
+                                        ),
+                                        'notes', COALESCE(
+                                            (
+                                                SELECT jsonb_agg(
+                                                    jsonb_build_object(
+                                                        'id', pn.id,
+                                                        'text', pn.text,
+                                                        'x', pn.pos_x,
+                                                        'y', pn.pos_y
+                                                    )
+                                                    ORDER BY pn.id
+                                                )
+                                                FROM post_notes pn
+                                                WHERE pn.post_id = p.id
+                                            ),
+                                            '[]'::jsonb
                                         )
                                     )
                                 END,
@@ -337,6 +571,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                             LEFT JOIN posts p ON p.id = pi.post_id
                             LEFT JOIN files f ON f.id = p.file_id
                             WHERE pi.playlist_id = pl.id
+                            ORDER BY pi.rank
                         ) raw_items
                     ),
                     '[]'::jsonb
@@ -434,33 +669,18 @@ impl PlaylistRepository for PostgresPlaylistRepository {
             })?;
         }
 
-        if let Some(tag_ids) = update_playlist.tag_ids {
-            sqlx::query!(
-                "DELETE FROM playlist_tags WHERE playlist_id = $1",
-                playlist_id
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(|err| {
-                log::error!(
-                    "playlists.update failed to clear tags for {}: {err}",
-                    playlist_id
-                );
-                RepoError::StorageError
-            })?;
-
-            for tag_id in tag_ids {
+        if let Some(remove_tag_ids) = update_playlist.remove_tag_ids {
+            if !remove_tag_ids.is_empty() {
                 sqlx::query!(
-                    "INSERT INTO playlist_tags (playlist_id, tag_id) VALUES ($1, $2)",
+                    "DELETE FROM playlist_tags WHERE playlist_id = $1 AND tag_id = ANY($2)",
                     playlist_id,
-                    tag_id
+                    &remove_tag_ids
                 )
                 .execute(&mut *tx)
                 .await
                 .map_err(|err| {
                     log::error!(
-                        "playlists.update failed to attach tag {} to {}: {err}",
-                        tag_id,
+                        "playlists.update failed to remove tags for {}: {err}",
                         playlist_id
                     );
                     RepoError::StorageError
@@ -468,77 +688,126 @@ impl PlaylistRepository for PostgresPlaylistRepository {
             }
         }
 
-        if let Some(items) = update_playlist.items {
-            sqlx::query!(
-                "DELETE FROM playlist_items WHERE playlist_id = $1",
-                playlist_id
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(|err| {
-                log::error!(
-                    "playlists.update failed to clear items for {}: {err}",
-                    playlist_id
-                );
-                RepoError::StorageError
-            })?;
-
-            for item in items {
-                let position = i32::try_from(item.position).map_err(|err| {
+        if let Some(add_tag_ids) = update_playlist.add_tag_ids {
+            if !add_tag_ids.is_empty() {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO playlist_tags (playlist_id, tag_id)
+                    SELECT $1, tag_id
+                    FROM UNNEST($2::uuid[]) AS tag_id
+                    ON CONFLICT (playlist_id, tag_id) DO NOTHING
+                    "#,
+                    playlist_id,
+                    &add_tag_ids
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
                     log::error!(
-                        "playlists.update invalid item position {} for {}: {err}",
-                        item.position,
+                        "playlists.update failed to add tags for {}: {err}",
                         playlist_id
                     );
                     RepoError::StorageError
                 })?;
-                let item_id = Uuid::now_v7();
+            }
+        }
 
-                match item.content {
-                    NewPlaylistItemContent::Post { post_id } => {
-                        sqlx::query!(
-                            r#"
-                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
-                            VALUES ($1, $2, $3, $4, NULL)
-                            "#,
+        if let Some(events) = update_playlist.item_events {
+            let mut transform_events = Vec::new();
+            let mut add_events = Vec::new();
+            let mut remove_events = Vec::new();
+
+            for event in events {
+                match event {
+                    PlaylistItemEvent::Edit { .. } | PlaylistItemEvent::Move { .. } => {
+                        transform_events.push(event);
+                    }
+                    PlaylistItemEvent::Add { after_id, content } => {
+                        add_events.push((after_id, content));
+                    }
+                    PlaylistItemEvent::Remove { item_id } => {
+                        remove_events.push(item_id);
+                    }
+                }
+            }
+
+            for event in transform_events {
+                match event {
+                    PlaylistItemEvent::Edit { item_id, content } => {
+                        Self::edit_playlist_item_content(&mut tx, playlist_id, item_id, content)
+                            .await?;
+                    }
+                    PlaylistItemEvent::Move { item_id, after_id } => {
+                        if after_id == Some(item_id) {
+                            continue;
+                        }
+
+                        let ordered_items = Self::fetch_item_ranks(&mut tx, playlist_id).await?;
+                        if !ordered_items.iter().any(|item| item.id == item_id) {
+                            return Err(RepoError::NotFound);
+                        }
+
+                        let (prev_rank, next_rank) = Self::resolve_rank_window(
+                            playlist_id,
+                            &ordered_items,
+                            after_id,
+                            Some(item_id),
+                        )?;
+                        let new_rank =
+                            Self::rank_between(prev_rank.as_deref(), next_rank.as_deref())?;
+
+                        let result = sqlx::query!(
+                            "UPDATE playlist_items SET rank = $3 WHERE id = $1 AND playlist_id = $2",
                             item_id,
                             playlist_id,
-                            position,
-                            post_id
+                            new_rank
                         )
                         .execute(&mut *tx)
                         .await
                         .map_err(|err| {
                             log::error!(
-                                "playlists.update failed to insert post item {} for {}: {err}",
+                                "playlists.update failed to move item {} for {}: {err}",
                                 item_id,
                                 playlist_id
                             );
                             RepoError::StorageError
                         })?;
+
+                        if result.rows_affected() == 0 {
+                            return Err(RepoError::NotFound);
+                        }
                     }
-                    NewPlaylistItemContent::Note { text } => {
-                        sqlx::query!(
-                            r#"
-                            INSERT INTO playlist_items (id, playlist_id, position, post_id, note_text)
-                            VALUES ($1, $2, $3, NULL, $4)
-                            "#,
-                            item_id,
-                            playlist_id,
-                            position,
-                            text
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .map_err(|err| {
-                            log::error!(
-                                "playlists.update failed to insert note item {} for {}: {err}",
-                                item_id,
-                                playlist_id
-                            );
-                            RepoError::StorageError
-                        })?;
-                    }
+                    _ => unreachable!("non-transform event in transform phase"),
+                }
+            }
+
+            for (after_id, content) in add_events {
+                let ordered_items = Self::fetch_item_ranks(&mut tx, playlist_id).await?;
+                let (prev_rank, next_rank) =
+                    Self::resolve_rank_window(playlist_id, &ordered_items, after_id, None)?;
+                let new_rank = Self::rank_between(prev_rank.as_deref(), next_rank.as_deref())?;
+                Self::insert_playlist_item(&mut tx, playlist_id, &new_rank, content).await?;
+            }
+
+            for item_id in remove_events {
+                let result = sqlx::query!(
+                    "DELETE FROM playlist_items WHERE id = $1 AND playlist_id = $2",
+                    item_id,
+                    playlist_id
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!(
+                        "playlists.update failed to remove item {} for {}: {err}",
+                        item_id,
+                        playlist_id
+                    );
+                    RepoError::StorageError
+                })?;
+
+                if result.rows_affected() == 0 {
+                    return Err(RepoError::NotFound);
                 }
             }
         }

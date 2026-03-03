@@ -1,6 +1,6 @@
 use crate::domain::model::{
-    File, FileID, FileMeta, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID, Tag,
-    TagCategory, TagID,
+    File, FileID, FileMeta, NoteID, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID,
+    PostNote, Tag, TagCategory, TagID,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
@@ -88,6 +88,25 @@ impl From<TagResponse> for Tag {
             name: t.name,
             category: t.category.into(),
             count: t.count.into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PostNoteResponse {
+    pub id: NoteID,
+    pub text: String,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl From<PostNoteResponse> for PostNote {
+    fn from(n: PostNoteResponse) -> Self {
+        Self {
+            id: n.id,
+            text: n.text,
+            x: n.x,
+            y: n.y,
         }
     }
 }

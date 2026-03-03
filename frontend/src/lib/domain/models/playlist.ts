@@ -1,6 +1,6 @@
-import type { UUID } from "$lib/domain/";
-import type { Tag } from "$lib/domain/";
-import type { Post } from "$lib/domain/";
+import type { UUID } from "$lib/domain/value-objects/uuid";
+import type { Tag } from "$lib/domain/models/tag";
+import type { Post } from "$lib/domain/models/post";
 
 export interface PlaylistSummary {
     id: UUID
@@ -12,9 +12,9 @@ export interface PlaylistSummary {
 }
 
 export interface Playlist {
-    id: string
+    id: UUID
     title: string
-    description: string
+    description: string | null
     tags: Tag[]
     cover: UUID | null
     items: PlaylistItem[]
@@ -27,5 +27,5 @@ export interface PlaylistItem {
 }
 
 export type PlaylistContent =
-    | { kind: "Post"; data: Post }
-    | { kind: "Note"; data: string }
+    | { Post: Post }
+    | { Note: string }

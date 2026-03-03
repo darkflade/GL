@@ -16,13 +16,13 @@
     import Header from "$lib/shared/components/layout/Header.svelte";
     import EmptyList from "$lib/shared/components/layout/EmptyList.svelte";
     import { toSearchInput } from "$lib/utils/search";
-    import type { SearchPostsQuery } from "$lib/domain";
-    import type { NextKeysetCursor } from "$lib/infrastructure/repositories/dto";
+    import AddToPlaylistDialog from "$lib/features/playlists/components/AddToPlaylistDialog.svelte";
+    import { readSelectedPostIds, writeSelectedPostIds } from "$lib/infrastructure/storage/selected-posts";
+    import type { SearchPostsQuery, UUID } from "$lib/domain";
+    import type { KeysetCursorDto } from "$lib/infrastructure/repositories/dto";
 
     const PAGINATION_MODE_KEY = "gl.pagination.mode";
     const KEYSET_LIMIT_KEY = "gl.pagination.keyset.limit";
-
-    type KeysetCursor = Extract<SearchPostsQuery["cursor"], { mode: "keyset" }>;
 
     let posts = $state<Post[]>([]);
     let loading = $state(false);
@@ -31,15 +31,16 @@
     let storageReady = $state(false);
     let currentPage = $state(0);
     let totalPages = $state(0);
+    let hasPrev = $state(false);
     let hasNext = $state(false);
-    let nextCursor = $state<NextKeysetCursor | null>(null);
+    let prevCursor = $state<KeysetCursorDto | null>(null);
+    let nextCursor = $state<KeysetCursorDto | null>(null);
     let keysetLimit = $state(20);
     let keysetLimitInput = $state("20");
     let settingsOpen = $state(false);
-
-    let keysetHistory = $state<KeysetCursor[]>([]);
-    let keysetHistoryIndex = $state(-1);
-    let keysetQueryKey = $state("");
+    let selectionMode = $state(false);
+    let selectedPostIds = $state<UUID[]>([]);
+    let playlistDialogOpen = $state(false);
 
     let currentFilters = $state<SearchPostsQuery>({
         tag_query: {
@@ -63,11 +64,55 @@
             keysetLimitInput = String(savedLimit);
         }
 
+        void restoreSelectedPosts();
         storageReady = true;
     });
 
-    function sameKeysetCursor(a: KeysetCursor, b: KeysetCursor): boolean {
-        return a.last_id === b.last_id && a.last_score === b.last_score && a.limit === b.limit;
+    async function restoreSelectedPosts() {
+        selectedPostIds = await readSelectedPostIds();
+    }
+
+    function isPostSelected(postId: UUID): boolean {
+        return selectedPostIds.includes(postId);
+    }
+
+    async function setSelectedPostIds(ids: UUID[]) {
+        selectedPostIds = ids;
+        await writeSelectedPostIds(ids);
+    }
+
+    async function togglePostSelection(postId: UUID) {
+        const next = isPostSelected(postId)
+            ? selectedPostIds.filter((id) => id !== postId)
+            : [...selectedPostIds, postId];
+        await setSelectedPostIds(next);
+    }
+
+    async function clearPostSelection() {
+        await setSelectedPostIds([]);
+    }
+
+    function openPlaylistSelectionMode() {
+        selectionMode = true;
+    }
+
+    function closePlaylistSelectionMode() {
+        selectionMode = false;
+    }
+
+    function openAddToPlaylistDialog() {
+        if (selectedPostIds.length === 0) return;
+        playlistDialogOpen = true;
+    }
+
+    function closeAddToPlaylistDialog() {
+        playlistDialogOpen = false;
+    }
+
+    function handlePlaylistApplied() {
+        playlistDialogOpen = false;
+        selectionMode = false;
+        void clearPostSelection();
     }
 
     function normalizeQuery(query: SearchPostsQuery, mode: PaginationMode): SearchPostsQuery {
@@ -83,41 +128,6 @@
             };
         }
         return withMode;
-    }
-
-    function updateKeysetHistory(filters: SearchPostsQuery) {
-        if (filters.cursor.mode !== "keyset") {
-            return;
-        }
-
-        const queryKey = JSON.stringify({
-            tag_query: filters.tag_query,
-            text_query: filters.text_query,
-        });
-
-        const cursor: KeysetCursor = {
-            mode: "keyset",
-            last_id: filters.cursor.last_id,
-            last_score: filters.cursor.last_score,
-            limit: filters.cursor.limit ?? keysetLimit,
-        };
-
-        if (queryKey !== keysetQueryKey) {
-            keysetQueryKey = queryKey;
-            keysetHistory = [cursor];
-            keysetHistoryIndex = 0;
-            return;
-        }
-
-        const existingIndex = keysetHistory.findIndex((item) => sameKeysetCursor(item, cursor));
-        if (existingIndex >= 0) {
-            keysetHistoryIndex = existingIndex;
-            return;
-        }
-
-        const base = keysetHistoryIndex >= 0 ? keysetHistory.slice(0, keysetHistoryIndex + 1) : [];
-        keysetHistory = [...base, cursor];
-        keysetHistoryIndex = base.length;
     }
 
     $effect(() => {
@@ -149,7 +159,6 @@
         currentFilters = filters;
         currentPage = filters.cursor.mode === "offset" ? filters.cursor.page : 0;
         textSearchValue = toSearchInput(filters);
-        updateKeysetHistory(filters);
         fetchData(filters);
     });
 
@@ -161,11 +170,15 @@
 
             if ("total_pages" in serverResponse) {
                 totalPages = serverResponse.total_pages;
+                hasPrev = false;
                 hasNext = false;
+                prevCursor = null;
                 nextCursor = null;
             } else {
                 totalPages = 0;
+                hasPrev = serverResponse.has_prev;
                 hasNext = serverResponse.has_next;
+                prevCursor = serverResponse.prev_cursor ?? null;
                 nextCursor = serverResponse.next_cursor ?? null;
             }
         } catch (error) {
@@ -209,12 +222,14 @@
     }
 
     async function loadPrevByKeyset() {
-        if (keysetHistoryIndex <= 0) return;
-
-        const previousCursor = keysetHistory[keysetHistoryIndex - 1];
+        if (!prevCursor) return;
         const query: SearchPostsQuery = {
             ...currentFilters,
-            cursor: previousCursor,
+            cursor: {
+                ...prevCursor,
+                mode: "keyset",
+                limit: keysetLimit,
+            },
         };
         await handleSearchQuery(query);
     }
@@ -259,6 +274,22 @@
                 paginationMode={paginationMode}
                 onQueryChange={handleSearchQuery}
             />
+            {#if selectionMode}
+                <span class="selection-count">Selected: {selectedPostIds.length}</span>
+                <button class="settings-btn" type="button" onclick={openAddToPlaylistDialog} disabled={selectedPostIds.length === 0}>
+                    Add To Playlist
+                </button>
+                <button class="settings-btn" type="button" onclick={() => void clearPostSelection()} disabled={selectedPostIds.length === 0}>
+                    Clear
+                </button>
+                <button class="settings-btn" type="button" onclick={closePlaylistSelectionMode}>
+                    Exit Select
+                </button>
+            {:else}
+                <button class="settings-btn" type="button" onclick={openPlaylistSelectionMode}>
+                    Select For Playlist
+                </button>
+            {/if}
             <button class="settings-btn" type="button" onclick={() => (settingsOpen = true)}>Settings</button>
         </div>
     </header>
@@ -308,13 +339,12 @@
                 Next
             </button>
         {:else}
-            <button class="pager-btn" type="button" onclick={loadPrevByKeyset} disabled={keysetHistoryIndex <= 0}>
+            <button class="pager-btn" type="button" onclick={loadPrevByKeyset} disabled={!hasPrev}>
                 Back
             </button>
             <button class="pager-btn" type="button" onclick={loadNextByKeyset} disabled={!hasNext}>
                 Next
             </button>
-            <span class="pager-label">Cursor {Math.max(1, keysetHistoryIndex + 1)}</span>
         {/if}
     </div>
 
@@ -328,20 +358,44 @@
         {:else}
             <div class="grid">
                 {#each posts as post (post.id)}
-                    <a href="/post?id={post.id}">
-                        <PostCard post={post} size={null} />
-                    </a>
+                    <div class="post-slot" class:selected={isPostSelected(post.id)}>
+                        {#if selectionMode}
+                            <label class="checkbox-corner">
+                                <input
+                                    type="checkbox"
+                                    checked={isPostSelected(post.id)}
+                                    onclick={(event) => event.stopPropagation()}
+                                    onchange={() => void togglePostSelection(post.id)}
+                                />
+                            </label>
+                            <button class="select-card-btn" type="button" onclick={() => void togglePostSelection(post.id)}>
+                                <PostCard post={post} size={null} />
+                            </button>
+                        {:else}
+                            <a href="/post?id={post.id}">
+                                <PostCard post={post} size={null} />
+                            </a>
+                        {/if}
+                    </div>
                 {/each}
             </div>
         {/if}
     </main>
 </div>
 
+<AddToPlaylistDialog
+    open={playlistDialogOpen}
+    postIds={selectedPostIds}
+    onClose={closeAddToPlaylistDialog}
+    onDone={handlePlaylistApplied}
+/>
+
 <style>
     .grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         gap: 1rem;
+        padding: 1rem;
     }
 
     h1 {
@@ -364,6 +418,12 @@
         border-radius: 8px;
         padding: 0.45rem 0.75rem;
         cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .selection-count {
+        color: #111827;
+        font-weight: 600;
         white-space: nowrap;
     }
 
@@ -458,5 +518,43 @@
     .pager-label {
         color: #374151;
         font-weight: 500;
+    }
+
+    .post-slot {
+        position: relative;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 2px solid transparent;
+    }
+
+    .post-slot.selected {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    .checkbox-corner {
+        position: absolute;
+        top: 0.45rem;
+        right: 0.45rem;
+        z-index: 5;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 6px;
+        padding: 0.2rem;
+        border: 1px solid #d1d5db;
+    }
+
+    .checkbox-corner input {
+        width: 1rem;
+        height: 1rem;
+        cursor: pointer;
+    }
+
+    .select-card-btn {
+        display: block;
+        width: 100%;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
     }
 </style>

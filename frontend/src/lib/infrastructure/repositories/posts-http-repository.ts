@@ -11,6 +11,7 @@ export const postsHttpRepository: PostsRepository = {
             query.cursor.mode === "keyset"
                 ? {
                       mode: query.cursor.mode,
+                      direction: query.cursor.direction,
                       last_id: query.cursor.last_id,
                       last_score: query.cursor.last_score,
                       limit: query.cursor.limit,

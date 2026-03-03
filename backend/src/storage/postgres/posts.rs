@@ -4,7 +4,7 @@ use crate::application::contracts::{
 };
 use crate::application::ports::PostRepository;
 use crate::domain::model::{Post, PostID, RepoError, Tag};
-use crate::storage::postgres::dto::{FileResponse, TagResponse};
+use crate::storage::postgres::dto::{FileResponse, PostNoteResponse, TagResponse};
 use async_trait::async_trait;
 use sqlx::PgPool;
 use sqlx::types::Json;
@@ -181,7 +181,23 @@ impl PostRepository for PostgresPostRepository {
                     )
                     FROM files f
                     WHERE f.id = p.file_id
-                ) AS "file!: Json<FileResponse>"
+                ) AS "file!: Json<FileResponse>",
+                COALESCE(
+                    (
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'id', pn.id,
+                                'text', pn.text,
+                                'x', pn.pos_x,
+                                'y', pn.pos_y
+                            )
+                            ORDER BY pn.id
+                        )
+                        FROM post_notes pn
+                        WHERE pn.post_id = p.id
+                    ),
+                    '[]'::jsonb
+                ) AS "notes!: Json<Vec<PostNoteResponse>>"
             FROM posts p
             LEFT JOIN post_tags pt ON pt.post_id = p.id
             LEFT JOIN tags t ON t.id = pt.tag_id
@@ -206,8 +222,7 @@ impl PostRepository for PostgresPostRepository {
             description: row.description,
             file: row.file.0.into(),
             tags: row.tags.0.into_iter().map(Tag::from).collect(),
-            //TODO load notes
-            notes: vec![],
+            notes: row.notes.0.into_iter().map(Into::into).collect(),
         })
     }
 
@@ -254,29 +269,38 @@ impl PostRepository for PostgresPostRepository {
             })?;
         }
 
-        if let Some(tag_ids) = update_post.tag_ids {
-            sqlx::query!("DELETE FROM post_tags WHERE post_id = $1", id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|err| {
-                    log::error!("posts.update failed to clear tags for {}: {err}", id);
-                    RepoError::StorageError
-                })?;
-
-            for tag_id in tag_ids {
+        if let Some(remove_tag_ids) = update_post.remove_tag_ids {
+            if !remove_tag_ids.is_empty() {
                 sqlx::query!(
-                    "INSERT INTO post_tags (post_id, tag_id) VALUES ($1, $2)",
+                    "DELETE FROM post_tags WHERE post_id = $1 AND tag_id = ANY($2)",
                     id,
-                    tag_id
+                    &remove_tag_ids
                 )
                 .execute(&mut *tx)
                 .await
                 .map_err(|err| {
-                    log::error!(
-                        "posts.update failed to attach tag {} to {}: {err}",
-                        tag_id,
-                        id
-                    );
+                    log::error!("posts.update failed to remove tags for {}: {err}", id);
+                    RepoError::StorageError
+                })?;
+            }
+        }
+
+        if let Some(add_tag_ids) = update_post.add_tag_ids {
+            if !add_tag_ids.is_empty() {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO post_tags (post_id, tag_id)
+                    SELECT $1, tag_id
+                    FROM UNNEST($2::uuid[]) AS tag_id
+                    ON CONFLICT (post_id, tag_id) DO NOTHING
+                    "#,
+                    id,
+                    &add_tag_ids
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|err| {
+                    log::error!("posts.update failed to add tags for {}: {err}", id);
                     RepoError::StorageError
                 })?;
             }
@@ -382,6 +406,22 @@ impl PostRepository for PostgresPostRepository {
                     FROM files f
                     WHERE f.id = p.file_id
                 ) AS "file!: Json<FileResponse>",
+                COALESCE(
+                    (
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'id', pn.id,
+                                'text', pn.text,
+                                'x', pn.pos_x,
+                                'y', pn.pos_y
+                            )
+                            ORDER BY pn.id
+                        )
+                        FROM post_notes pn
+                        WHERE pn.post_id = p.id
+                    ),
+                    '[]'::jsonb
+                ) AS "notes!: Json<Vec<PostNoteResponse>>",
 
                 COUNT(DISTINCT CASE
                     WHEN t.name = ANY($1) THEN t.name
@@ -438,8 +478,7 @@ impl PostRepository for PostgresPostRepository {
                     description: r.description,
                     file: r.file.0.into(),
                     tags: r.tags.0.into_iter().map(Tag::from).collect(),
-                    //TODO return notes
-                    notes: vec![],
+                    notes: r.notes.0.into_iter().map(Into::into).collect(),
                 })
                 .collect(),
             total_pages: page_count,
@@ -479,7 +518,23 @@ impl PostRepository for PostgresPostRepository {
                     )
                     FROM files f
                     WHERE f.id = p.file_id
-                ) AS "file!: Json<FileResponse>"
+                ) AS "file!: Json<FileResponse>",
+                COALESCE(
+                    (
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'id', pn.id,
+                                'text', pn.text,
+                                'x', pn.pos_x,
+                                'y', pn.pos_y
+                            )
+                            ORDER BY pn.id
+                        )
+                        FROM post_notes pn
+                        WHERE pn.post_id = p.id
+                    ),
+                    '[]'::jsonb
+                ) AS "notes!: Json<Vec<PostNoteResponse>>"
             FROM posts p
             LEFT JOIN post_tags pt ON pt.post_id = p.id
             LEFT JOIN tags t ON t.id = pt.tag_id
@@ -512,8 +567,7 @@ impl PostRepository for PostgresPostRepository {
                     file: r.file.0.into(),
                     description: r.description,
                     tags: r.tags.0.into_iter().map(Tag::from).collect(),
-                    //TODO load notes
-                    notes: vec![],
+                    notes: r.notes.0.into_iter().map(Into::into).collect(),
                 })
                 .collect(),
             total_pages: page_count,
@@ -568,6 +622,22 @@ impl PostRepository for PostgresPostRepository {
                                 FROM files f
                                 WHERE f.id = p.file_id
                             ) AS file,
+                            COALESCE(
+                                (
+                                    SELECT jsonb_agg(
+                                        jsonb_build_object(
+                                            'id', pn.id,
+                                            'text', pn.text,
+                                            'x', pn.pos_x,
+                                            'y', pn.pos_y
+                                        )
+                                        ORDER BY pn.id
+                                    )
+                                    FROM post_notes pn
+                                    WHERE pn.post_id = p.id
+                                ),
+                                '[]'::jsonb
+                            ) AS notes,
                             COUNT(DISTINCT CASE
                                 WHEN t.name = ANY($1) THEN t.name
                             END)::bigint AS should_score
@@ -595,6 +665,7 @@ impl PostRepository for PostgresPostRepository {
                         description,
                         tags AS "tags!: Json<Vec<TagResponse>>",
                         file AS "file!: Json<FileResponse>",
+                        notes AS "notes!: Json<Vec<PostNoteResponse>>",
                         should_score AS "should_score!: i64"
                     FROM ranked_posts
                     WHERE
@@ -624,8 +695,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                                //TODO load notes
-                                notes: vec![],
+                                notes: row.notes.0.into_iter().map(Into::into).collect(),
                             },
                             row.should_score as f64,
                         )
@@ -662,6 +732,22 @@ impl PostRepository for PostgresPostRepository {
                                 FROM files f
                                 WHERE f.id = p.file_id
                             ) AS file,
+                            COALESCE(
+                                (
+                                    SELECT jsonb_agg(
+                                        jsonb_build_object(
+                                            'id', pn.id,
+                                            'text', pn.text,
+                                            'x', pn.pos_x,
+                                            'y', pn.pos_y
+                                        )
+                                        ORDER BY pn.id
+                                    )
+                                    FROM post_notes pn
+                                    WHERE pn.post_id = p.id
+                                ),
+                                '[]'::jsonb
+                            ) AS notes,
                             COUNT(DISTINCT CASE
                                 WHEN t.name = ANY($1) THEN t.name
                             END)::bigint AS should_score
@@ -689,6 +775,7 @@ impl PostRepository for PostgresPostRepository {
                         description,
                         tags AS "tags!: Json<Vec<TagResponse>>",
                         file AS "file!: Json<FileResponse>",
+                        notes AS "notes!: Json<Vec<PostNoteResponse>>",
                         should_score AS "should_score!: i64"
                     FROM ranked_posts
                     WHERE
@@ -718,8 +805,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                                //TODO load notes
-                                notes: vec![],
+                                notes: row.notes.0.into_iter().map(Into::into).collect(),
                             },
                             row.should_score as f64,
                         )
@@ -785,6 +871,22 @@ impl PostRepository for PostgresPostRepository {
                             FROM files f
                             WHERE f.id = p.file_id
                         ) AS "file!: Json<FileResponse>",
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'id', pn.id,
+                                        'text', pn.text,
+                                        'x', pn.pos_x,
+                                        'y', pn.pos_y
+                                    )
+                                    ORDER BY pn.id
+                                )
+                                FROM post_notes pn
+                                WHERE pn.post_id = p.id
+                            ),
+                            '[]'::jsonb
+                        ) AS "notes!: Json<Vec<PostNoteResponse>>",
                         0::bigint AS "should_score!: i64"
                     FROM posts p
                     LEFT JOIN post_tags pt ON pt.post_id = p.id
@@ -811,8 +913,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                                //TODO load notes
-                                notes: vec![],
+                                notes: row.notes.0.into_iter().map(Into::into).collect(),
                             },
                             row.should_score as f64,
                         )
@@ -848,6 +949,22 @@ impl PostRepository for PostgresPostRepository {
                             FROM files f
                             WHERE f.id = p.file_id
                         ) AS "file!: Json<FileResponse>",
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'id', pn.id,
+                                        'text', pn.text,
+                                        'x', pn.pos_x,
+                                        'y', pn.pos_y
+                                    )
+                                    ORDER BY pn.id
+                                )
+                                FROM post_notes pn
+                                WHERE pn.post_id = p.id
+                            ),
+                            '[]'::jsonb
+                        ) AS "notes!: Json<Vec<PostNoteResponse>>",
                         0::bigint AS "should_score!: i64"
                     FROM posts p
                     LEFT JOIN post_tags pt ON pt.post_id = p.id
@@ -874,8 +991,7 @@ impl PostRepository for PostgresPostRepository {
                                 description: row.description,
                                 file: row.file.0.into(),
                                 tags: row.tags.0.into_iter().map(Tag::from).collect(),
-                                //TODO load notes
-                                notes: vec![],
+                                notes: row.notes.0.into_iter().map(Into::into).collect(),
                             },
                             row.should_score as f64,
                         )

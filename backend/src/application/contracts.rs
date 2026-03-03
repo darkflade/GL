@@ -1,4 +1,6 @@
-use crate::domain::model::{FileID, NoteID, PlaylistSummary, Post, PostID, TagCategory, TagID};
+use crate::domain::model::{
+    FileID, NoteID, PlaylistItemID, PlaylistSummary, Post, PostID, TagCategory, TagID,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -41,7 +43,8 @@ pub struct UpdatePostNote {
 pub struct UpdatePost {
     pub title: Option<String>,
     pub description: Option<String>,
-    pub tag_ids: Option<Vec<TagID>>,
+    pub add_tag_ids: Option<Vec<TagID>>,
+    pub remove_tag_ids: Option<Vec<TagID>>,
     pub notes: Option<Vec<UpdatePostNote>>,
 }
 
@@ -71,9 +74,30 @@ pub enum NewPlaylistItemContent {
 pub struct UpdatePlaylist {
     pub title: Option<String>,
     pub description: Option<String>,
-    pub tag_ids: Option<Vec<TagID>>,
+    pub add_tag_ids: Option<Vec<TagID>>,
+    pub remove_tag_ids: Option<Vec<TagID>>,
     pub cover: Option<FileID>,
-    pub items: Option<Vec<NewPlaylistItem>>,
+    pub item_events: Option<Vec<PlaylistItemEvent>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum PlaylistItemEvent {
+    Add {
+        after_id: Option<PlaylistItemID>,
+        content: NewPlaylistItemContent,
+    },
+    Edit {
+        item_id: PlaylistItemID,
+        content: NewPlaylistItemContent,
+    },
+    Remove {
+        item_id: PlaylistItemID,
+    },
+    Move {
+        item_id: PlaylistItemID,
+        after_id: Option<PlaylistItemID>,
+    },
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

@@ -60,6 +60,11 @@ export const api = {
             method: "POST",
             body: body === undefined ? undefined : JSON.stringify(body),
         }),
+    patch: <T>(url: string, body?: unknown) =>
+        request<T>(url, {
+            method: "PATCH",
+            body: body === undefined ? undefined : JSON.stringify(body),
+        }),
     delete: <T>(url: string) => request<T>(url, { method: "DELETE" }),
     upload: async <T>(url: string, formData: FormData) => {
         const response = await fetch(`${BASE_URL}${url}`, {

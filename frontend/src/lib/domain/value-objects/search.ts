@@ -11,6 +11,7 @@ export interface TagQuery {
 }
 
 export type Cursor = OffsetCursor | KeysetCursor;
+export type KeysetDirection = "next" | "prev";
 
 export interface OffsetCursor {
     mode: "offset";
@@ -20,6 +21,7 @@ export interface OffsetCursor {
 
 export interface KeysetCursor {
     mode: "keyset";
+    direction?: KeysetDirection;
     last_id?: string;
     last_score?: number;
     limit?: number;

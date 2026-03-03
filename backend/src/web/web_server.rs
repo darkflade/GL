@@ -69,22 +69,13 @@ where
                     .service(
                         web::scope("/playlists")
                             .route("", web::post().to(create_playlist::<PR, PLR, TR, FR, FS>))
-                            .route(
-                                "/search",
-                                web::get().to(get_my_playlists::<PR, PLR, TR, FR, FS>),
-                            )
-                            .route(
-                                "/{id}",
-                                web::get().to(get_playlist_details::<PR, PLR, TR, FR, FS>),
-                            )
-                            .route(
-                                "/{id}",
-                                web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>),
-                            )
-                            .route(
-                                "/{id}",
-                                web::patch().to(update_playlist::<PR, PLR, TR, FR, FS>),
-                            ),
+                            .route("/search", web::post().to(get_my_playlists::<PR, PLR, TR, FR, FS>))
+                            .service(
+                                web::scope("/{id}")
+                                    .route("", web::get().to(get_playlist_details::<PR, PLR, TR, FR, FS>))
+                                    .route("", web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>))
+                                    .route("", web::patch().to(update_playlist::<PR, PLR, TR, FR, FS>), ),
+                                )
                     )
                     .service(
                         web::scope("/posts")

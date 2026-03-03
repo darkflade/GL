@@ -27,6 +27,9 @@ export function serializeQuery(query: SearchPostsQuery): string {
             params.set("page_size", String(query.cursor.page_size));
         }
     } else {
+        if (query.cursor.direction) {
+            params.set("direction", query.cursor.direction);
+        }
         if (query.cursor.last_id) {
             params.set("last_id", query.cursor.last_id);
         }
@@ -55,6 +58,8 @@ export function deserializeQuery(params: URLSearchParams): SearchPostsQuery {
     const mode = params.get("mode") === "keyset" ? "keyset" : "offset";
     const rawPage = Number.parseInt(params.get("page") ?? "0", 10);
     const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
+    const directionParam = params.get("direction");
+    const direction = directionParam === "next" || directionParam === "prev" ? directionParam : undefined;
 
     return {
         tag_query: {
@@ -67,6 +72,7 @@ export function deserializeQuery(params: URLSearchParams): SearchPostsQuery {
             mode === "keyset"
                 ? {
                       mode,
+                      direction,
                       last_id: params.get("last_id") ?? undefined,
                       last_score: params.get("last_score") ? Number(params.get("last_score")) : undefined,
                       limit: params.get("limit") ? Number(params.get("limit")) : undefined,

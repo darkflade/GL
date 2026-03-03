@@ -8,9 +8,11 @@
     import {getPost} from "$lib/application/use-cases/get-post";
     import PostCard from "$lib/features/feed/components/PostCard.svelte";
     import Header from "$lib/shared/components/layout/Header.svelte";
+    import AddToPlaylistDialog from "$lib/features/playlists/components/AddToPlaylistDialog.svelte";
 
     let loading = $state(false)
     let post = $state<Post>()
+    let playlistDialogOpen = $state(false)
 
     $effect(() => {
         const id = postIDFromURL(page.url.searchParams)
@@ -30,6 +32,15 @@
             loading = false
         }
     }
+
+    function openPlaylistDialog() {
+        if (!post) return;
+        playlistDialogOpen = true;
+    }
+
+    function closePlaylistDialog() {
+        playlistDialogOpen = false;
+    }
 </script>
 
 {#if loading}
@@ -43,6 +54,9 @@
         <div class="description">
             Description: {post.description}
         </div>
+        <button class="playlist-btn" type="button" onclick={openPlaylistDialog}>
+            Add To Playlist
+        </button>
     </header>
     <main class="main">
 
@@ -67,6 +81,15 @@
     <EmptyList/>
 {/if}
 
+{#if post}
+    <AddToPlaylistDialog
+        open={playlistDialogOpen}
+        postIds={[post.id]}
+        onClose={closePlaylistDialog}
+        onDone={closePlaylistDialog}
+    />
+{/if}
+
 <style>
     .header {
         display: flex;
@@ -84,6 +107,15 @@
     .description {
         margin-bottom: 10px;
         color: #666;
+    }
+
+    .playlist-btn {
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        background: #fff;
+        width: fit-content;
+        padding: 0.4rem 0.75rem;
+        cursor: pointer;
     }
 
     .tags {
