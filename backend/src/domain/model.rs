@@ -23,6 +23,15 @@ pub enum FileType {
     Video = 1,
     Audio = 2,
 }
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileStatus {
+    Validating = 0,
+    Ready = 1,
+    Failed = 2,
+    Thumbnailing = 3,
+}
 #[derive(Clone, Serialize, Deserialize)]
 pub enum ThumbSizeType {
     Small = 0,
@@ -43,6 +52,24 @@ impl From<i16> for FileType {
 
 impl From<FileType> for i16 {
     fn from(v: FileType) -> Self {
+        v as i16
+    }
+}
+
+impl From<i16> for FileStatus {
+    fn from(v: i16) -> Self {
+        match v {
+            0 => FileStatus::Validating,
+            1 => FileStatus::Ready,
+            2 => FileStatus::Failed,
+            3 => FileStatus::Thumbnailing,
+            _ => FileStatus::Failed,
+        }
+    }
+}
+
+impl From<FileStatus> for i16 {
+    fn from(v: FileStatus) -> Self {
         v as i16
     }
 }
@@ -93,11 +120,31 @@ pub struct Tag {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct TagRelation {
+    pub id: Uuid,
+    pub parent_id: TagID,
+    pub parent_name: String,
+    pub parent_count: i32,
+    pub child_id: TagID,
+    pub child_name: String,
+    pub child_count: i32,
+    pub score: i32,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TagNode {
+    #[serde(flatten)]
+    pub tag: Tag,
+    pub children: Option<Vec<TagNode>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct File {
     pub id: FileID,
     pub path: PathBuf,
     pub hash: Option<String>,
     pub media_type: FileType,
+    pub status: FileStatus,
     pub meta: Option<FileMeta>,
     pub created_at: Option<OffsetDateTime>,
     pub thumbnail: Option<Thumbnail>,
@@ -119,6 +166,7 @@ impl Default for File {
             path: PathBuf::from(""),
             hash: None,
             media_type: FileType::Picture,
+            status: FileStatus::Validating,
             meta: None,
             created_at: None,
             thumbnail: None,
@@ -186,6 +234,7 @@ pub struct User {
 #[derive(Debug)]
 pub enum RepoError {
     NotFound,
+    Conflict,
     StorageError,
 }
 #[derive(Debug)]

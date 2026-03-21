@@ -2,7 +2,7 @@ use crate::application::contracts::NewUser;
 use crate::application::ports::UserRepository;
 use crate::domain::model::{RepoError, User};
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::{Error as SqlxError, PgPool};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -53,7 +53,14 @@ impl UserRepository for PostgresUserRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|_| RepoError::StorageError)?;
+        .map_err(|err| {
+            if let SqlxError::Database(db_err) = &err {
+                if db_err.code().as_deref() == Some("23505") {
+                    return RepoError::Conflict;
+                }
+            }
+            RepoError::StorageError
+        })?;
 
         Ok(id)
     }

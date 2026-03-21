@@ -3,6 +3,7 @@ use crate::application::ports::{
 };
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
+use crate::domain::model::FileStatus;
 use crate::web::error::AppError;
 use crate::web::handlers::utils::{map_repo_error, parse_uuid};
 use actix_web::web::Data;
@@ -27,6 +28,10 @@ where
         .execute(file_uuid)
         .await
         .map_err(|err| map_repo_error(err, "File not found", "files.get"))?;
+
+    if !matches!(file_path.status, FileStatus::Ready) {
+        return Err(AppError::conflict("File is not ready"));
+    }
 
     let path_str = file_path.path.to_string_lossy();
 

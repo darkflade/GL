@@ -102,8 +102,9 @@ pub async fn register_user<UR: UserRepository + Clone>(
     };
 
     let user_id = user_repo.create(new_user).await.map_err(|err| match err {
-        RepoError::StorageError => AppError::conflict("User already exists"),
+        RepoError::Conflict => AppError::conflict("User already exists"),
         RepoError::NotFound => AppError::internal("users.register impossible not found state"),
+        RepoError::StorageError => AppError::internal("users.register failed to create user"),
     })?;
 
     Identity::login(&req.extensions(), user_id.to_string()).map_err(|err| {

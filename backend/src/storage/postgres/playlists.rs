@@ -147,6 +147,7 @@ impl PostgresPlaylistRepository {
         }
     }
 
+    // Try to realize own algorithm with
     fn rank_between(prev: Option<&str>, next: Option<&str>) -> Result<String, RepoError> {
         if let (Some(prev_rank), Some(next_rank)) = (prev, next) {
             if prev_rank >= next_rank {
@@ -164,6 +165,7 @@ impl PostgresPlaylistRepository {
         let mut output = Vec::new();
 
         for idx in 0..Self::MAX_RANK_DEPTH {
+            //TODO make algorithm with 65 calculating
             let left = Self::rank_digit_at(prev, idx, min_digit)?;
             let right = Self::rank_digit_at(next, idx, max_digit)?;
 
@@ -206,6 +208,7 @@ impl PostgresPlaylistRepository {
                     r#"
                     INSERT INTO playlist_items (id, playlist_id, rank, post_id, note_text)
                     VALUES ($1, $2, $3, $4, NULL)
+
                     "#,
                     item_id,
                     playlist_id,
@@ -228,6 +231,7 @@ impl PostgresPlaylistRepository {
                     r#"
                     INSERT INTO playlist_items (id, playlist_id, rank, post_id, note_text)
                     VALUES ($1, $2, $3, NULL, $4)
+
                     "#,
                     item_id,
                     playlist_id,
@@ -262,6 +266,7 @@ impl PostgresPlaylistRepository {
                     UPDATE playlist_items
                     SET post_id = $3, note_text = NULL
                     WHERE id = $1 AND playlist_id = $2
+
                     "#,
                 item_id,
                 playlist_id,
@@ -282,6 +287,7 @@ impl PostgresPlaylistRepository {
                     UPDATE playlist_items
                     SET post_id = NULL, note_text = $3
                     WHERE id = $1 AND playlist_id = $2
+
                     "#,
                 item_id,
                 playlist_id,
@@ -316,6 +322,7 @@ impl PostgresPlaylistRepository {
             FROM playlist_items
             WHERE playlist_id = $1
             ORDER BY rank ASC
+
             "#,
             playlist_id
         )
@@ -361,6 +368,7 @@ impl PostgresPlaylistRepository {
         }
 
         match after_id {
+            //Todo
             None => Ok((None, Some(filtered[0].rank.clone()))),
             Some(anchor_id) => {
                 let anchor_index = filtered.iter().position(|item| item.id == anchor_id);
@@ -578,6 +586,7 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                 ) AS "items!: Json<Vec<PlaylistItemPayload>>"
             FROM playlists pl
             WHERE pl.id = $1 AND pl.owner_id = $2
+
             "#,
             playlist_id,
             user_id
@@ -757,7 +766,8 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                             Self::rank_between(prev_rank.as_deref(), next_rank.as_deref())?;
 
                         let result = sqlx::query!(
-                            "UPDATE playlist_items SET rank = $3 WHERE id = $1 AND playlist_id = $2",
+                            "UPDATE playlist_items SET rank = $3 WHERE id = $1 AND playlist_id = $2
+",
                             item_id,
                             playlist_id,
                             new_rank
@@ -785,13 +795,19 @@ impl PlaylistRepository for PostgresPlaylistRepository {
                 let ordered_items = Self::fetch_item_ranks(&mut tx, playlist_id).await?;
                 let (prev_rank, next_rank) =
                     Self::resolve_rank_window(playlist_id, &ordered_items, after_id, None)?;
+                log::debug!(
+                    "Ranks prev: {}  \n next:{}",
+                    prev_rank.clone().unwrap_or_default(),
+                    next_rank.clone().unwrap_or_default()
+                );
                 let new_rank = Self::rank_between(prev_rank.as_deref(), next_rank.as_deref())?;
                 Self::insert_playlist_item(&mut tx, playlist_id, &new_rank, content).await?;
             }
 
             for item_id in remove_events {
                 let result = sqlx::query!(
-                    "DELETE FROM playlist_items WHERE id = $1 AND playlist_id = $2",
+                    "DELETE FROM playlist_items WHERE id = $1 AND playlist_id = $2
+",
                     item_id,
                     playlist_id
                 )

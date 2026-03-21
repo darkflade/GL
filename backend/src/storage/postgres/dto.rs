@@ -3,17 +3,20 @@ use crate::domain::model::{
     PostNote, Tag, TagCategory, TagID,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use sqlx::types::Json;
 use std::path::PathBuf;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, FromRow)]
 pub struct FileResponse {
     pub id: FileID,
     pub path: String,
     pub hash: Option<String>,
     pub media_type: i16,
+    #[serde(default)]
+    pub status: Option<i16>,
     pub meta: Option<Json<FileMetaResponse>>,
     #[serde(deserialize_with = "deserialize_optional_offset_datetime")]
     pub created_at: Option<OffsetDateTime>,
@@ -41,6 +44,7 @@ impl From<FileResponse> for File {
             path: PathBuf::from(row.path),
             hash: row.hash,
             media_type: row.media_type.into(),
+            status: row.status.unwrap_or(1).into(),
             meta: row.meta.map(FileMeta::from),
             created_at: row.created_at,
             thumbnail: None,

@@ -150,9 +150,8 @@ where
                     .tags
                     .iter()
                     .map(|t| NewTag {
-                        //TODO There is something wrong
                         category: TagCategory::General,
-                        value: t.clone(),
+                        name: t.clone(),
                     })
                     .collect();
 

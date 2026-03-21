@@ -1,12 +1,8 @@
 use crate::application::ports::FileRepository;
-use crate::domain::model::File;
-use crate::domain::model::FileID;
-use crate::domain::model::RepoError;
-use crate::storage::postgres::dto::FileMetaResponse;
+use crate::domain::model::{File, FileID, FileMeta, FileStatus, FileType, RepoError};
 use crate::storage::postgres::dto::FileResponse;
 use async_trait::async_trait;
 use sqlx::PgPool;
-use sqlx::types::Json;
 
 #[derive(Clone)]
 pub struct PostgresFileRepository {
@@ -49,27 +45,99 @@ impl FileRepository for PostgresFileRepository {
     }
 
     async fn get(&self, id: FileID) -> Result<File, RepoError> {
-        let response = sqlx::query_as!(
-            FileResponse,
+        let response = sqlx::query_as::<_, FileResponse>(
             r#"
                 SELECT id,
                        path,
                        hash,
                        media_type,
-                       meta as "meta: Json<FileMetaResponse>",
+                       status,
+                       meta,
                        created_at
                 FROM files
                 WHERE id = $1
             "#,
-            id
         )
+        .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| {
-            log::error!("files.get db query failed: {e}");
+        .map_err(|err| match err {
+            sqlx::Error::RowNotFound => RepoError::NotFound,
+            _ => {
+                log::error!("files.get db query failed: {err}");
+                RepoError::StorageError
+            }
+        })?;
+
+        Ok(response.into())
+    }
+
+    async fn mark_ready(
+        &self,
+        id: FileID,
+        path: &str,
+        media_type: FileType,
+        meta: Option<FileMeta>,
+    ) -> Result<(), RepoError> {
+        let meta_value = serde_json::to_value(meta).map_err(|err| {
+            log::error!("files.mark_ready failed to serialize file meta: {err}");
             RepoError::StorageError
         })?;
 
-        File::try_from(response).map_err(|_| RepoError::StorageError)
+        let result = sqlx::query(
+            r#"
+                UPDATE files
+                SET path = $2,
+                    media_type = $3,
+                    meta = $4,
+                    status = $5
+                WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(path)
+        .bind(i16::from(media_type))
+        .bind(meta_value)
+        .bind(i16::from(FileStatus::Ready))
+        .execute(&self.pool)
+        .await
+        .map_err(|err| {
+            log::error!("files.mark_ready db query failed: {err}");
+            RepoError::StorageError
+        })?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepoError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn mark_failed(&self, id: FileID) -> Result<(), RepoError> {
+        self.set_status(id, FileStatus::Failed).await
+    }
+
+    async fn set_status(&self, id: FileID, status: FileStatus) -> Result<(), RepoError> {
+        let result = sqlx::query(
+            r#"
+                UPDATE files
+                SET status = $2
+                WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(i16::from(status))
+        .execute(&self.pool)
+        .await
+        .map_err(|err| {
+            log::error!("files.set_status db query failed: {err}");
+            RepoError::StorageError
+        })?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepoError::NotFound);
+        }
+
+        Ok(())
     }
 }

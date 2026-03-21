@@ -4,7 +4,7 @@
 <div class="div">
     <nav>
         <Button href="/">Feed</Button>
-        <Button href="/playlist">Playlists</Button>
+        <Button href="/playlists">Playlists</Button>
 
 
         {#if 0}

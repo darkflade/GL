@@ -28,7 +28,7 @@ services:
       - frontend
 
   postgres:
-    image: postgres:latest
+    image: postgres:alpine
     environment:
       POSTGRES_DB: glab
       POSTGRES_USER: glab
@@ -39,14 +39,47 @@ services:
       - pgdata:/var/lib/postgresql
       - ./postgres/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
 
+  redis:
+    image: redis:alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
   backend:
     build: ./backend
     env_file: .env
     volumes:
-      - /srv/media/new:/media/new:ro
+      - /srv/media/new:/media/new
     depends_on:
       - postgres
+      - redis
+
+  file_validator_worker:
+    build:
+      context: .
+      dockerfile: ./workers/Dockerfile.validator
+    env_file: .env
+    volumes:
+      - /srv/media/new:/media/new
+    depends_on:
+      - postgres
+      - redis
+
+  thumbnailer_worker:
+    build:
+      context: .
+      dockerfile: ./workers/Dockerfile.thumbnailer
+    env_file: .env
+    command: ["./thumbnailer_worker"]
+    volumes:
+      - /srv/media/new:/media/new
+    depends_on:
+      - postgres
+      - redis
 
 volumes:
   pgdata:
+  redisdata:
   frontend_node_modules:

@@ -6,7 +6,7 @@
 
 [ ] Make for playlist editing (tag/name, playlist content) Event system
 
-[ ] Playlists system
+[x] Playlists system
   Index: (playlist_id, position)
   For reorder: get some space (start 1024). Ends — реassign positions.
   Endpoints: create playlist, add item (at position), remove item, reorder (PATCH reorder with array of ids or move item API).
@@ -21,6 +21,7 @@
   Logic as files for get
 ### Prob
 [x] Cursor return previous
+[ ] Review cursor logic and Clean it
 
 ## Secodary
 [ ] Logger(made some improvments) 

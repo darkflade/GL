@@ -10,7 +10,10 @@ use crate::application::use_cases::posts::{
     CreatePostUseCase, DeletePostUseCase, GetAllPostsKeysetUseCase, GetAllPostsUseCase,
     GetPostUseCase, SearchPostsKeysetUseCase, SearchPostsUseCase, UpdatePostUseCase,
 };
-use crate::application::use_cases::tags::SearchTagsUseCase;
+use crate::application::use_cases::tags::{
+    GetRelatedTagsUseCase, ListTagRelationsKeysetUseCase, ListTagsKeysetUseCase, SearchTagsUseCase,
+    UpdateTagRelationsUseCase, UpdateTagsUseCase,
+};
 use crate::domain::files::FileStorage;
 pub struct Services<PR, PLR, TR, FR, FS> {
     //  Posts
@@ -31,6 +34,11 @@ pub struct Services<PR, PLR, TR, FR, FS> {
     pub get_all_playlists: GetAllPlaylistsUseCase<PLR>,
     //  Tags
     pub search_tags: SearchTagsUseCase<TR>,
+    pub list_tags_keyset: ListTagsKeysetUseCase<TR>,
+    pub get_related_tags: GetRelatedTagsUseCase<TR>,
+    pub list_tag_relations_keyset: ListTagRelationsKeysetUseCase<TR>,
+    pub update_tags: UpdateTagsUseCase<TR>,
+    pub update_tag_relations: UpdateTagRelationsUseCase<TR>,
     //  Files
     pub get_file: GetFileUseCase<FR>,
 }
@@ -93,7 +101,12 @@ where
                 repo: playlist.clone(),
             },
             //  Tags
-            search_tags: SearchTagsUseCase { repo: tags },
+            search_tags: SearchTagsUseCase { repo: tags.clone() },
+            list_tags_keyset: ListTagsKeysetUseCase { repo: tags.clone() },
+            get_related_tags: GetRelatedTagsUseCase { repo: tags.clone() },
+            list_tag_relations_keyset: ListTagRelationsKeysetUseCase { repo: tags.clone() },
+            update_tags: UpdateTagsUseCase { repo: tags.clone() },
+            update_tag_relations: UpdateTagRelationsUseCase { repo: tags },
             //  Files
             get_file: GetFileUseCase { repo: files },
         }

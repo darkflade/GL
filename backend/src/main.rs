@@ -6,6 +6,7 @@ use crate::storage::postgres::users::PostgresUserRepository;
 use crate::web::web_server;
 use anyhow::Context;
 use sqlx::postgres::PgPoolOptions;
+use std::fs;
 use storage::file_storage::files::LocalFileStorage;
 
 mod application;
@@ -18,6 +19,15 @@ mod web;
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     logging::init_logger().context("failed to initialize logger")?;
+
+    if let Ok(output_path) = std::env::var("OPENAPI_OUT") {
+        let yaml = web::api_docs::generate_openapi_yaml()
+            .context("failed to generate openapi yaml from annotations")?;
+        fs::write(&output_path, yaml)
+            .with_context(|| format!("failed to write openapi yaml to {output_path}"))?;
+        log::info!("openapi yaml generated at {}", output_path);
+        return Ok(());
+    }
 
     let db_url = std::env::var("DATABASE_URL").context("DATABASE_URL is not set")?;
     let server_ip_address = std::env::var("BACKEND_IP").unwrap_or_else(|_| "localhost".to_string());
@@ -40,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let file_repo = PostgresFileRepository::new(pool.clone());
     let playlist_repo = PostgresPlaylistRepository::new(pool.clone());
     let user_repo = PostgresUserRepository::new(pool.clone());
-    let file_storage = LocalFileStorage::new("./gl_posts");
+    let file_storage = LocalFileStorage::new("/media/new");
 
     log::info!(
         "server startup complete, listening on http://{}:{}",

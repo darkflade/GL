@@ -1,0 +1,413 @@
+openapi: 3.0.3
+info:
+  title: GL Posts API
+  version: 0.1.0
+  description: Posts endpoints for frontend/testing.
+servers:
+  - url: http://localhost
+  - url: http://localhost:8080
+paths:
+  /api/posts:
+    post:
+      summary: Create post
+      operationId: createPost
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [meta, file]
+              properties:
+                meta:
+                  type: string
+                  description: JSON string with CreatePostMeta
+                  example: '{"title":"My post","tags":["landscape","night"]}'
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Created post id
+          content:
+            application/json:
+              schema:
+                type: string
+                format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/posts/{id}:
+    get:
+      summary: Get post details
+      operationId: getPost
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Post details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    patch:
+      summary: Update post
+      operationId: updatePost
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePost'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      summary: Delete post
+      operationId: deletePost
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/posts/search:
+    post:
+      summary: Search posts
+      operationId: searchPosts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchPostsRequest'
+      responses:
+        '200':
+          description: Search response (offset or keyset depending on cursor.mode)
+          content:
+            application/json:
+              oneOf:
+                - schema:
+                    $ref: '#/components/schemas/SearchPostsOffsetResponse'
+                - schema:
+                    $ref: '#/components/schemas/SearchPostsKeysetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    PostId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    TagCategory:
+      type: string
+      enum: [Artist, Copyright, Character, General]
+
+    FileType:
+      type: string
+      enum: [Picture, Video, Audio]
+
+    FileMeta:
+      type: object
+      properties:
+        width:
+          type: integer
+          format: int32
+          nullable: true
+        height:
+          type: integer
+          format: int32
+          nullable: true
+        extension:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          format: int64
+          nullable: true
+
+    File:
+      type: object
+      required: [id, path, media_type]
+      properties:
+        id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        hash:
+          type: string
+          nullable: true
+        media_type:
+          $ref: '#/components/schemas/FileType'
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/FileMeta'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        thumbnail:
+          nullable: true
+
+    Tag:
+      type: object
+      required: [id, name, category, count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/TagCategory'
+        count:
+          type: integer
+          format: int32
+
+    PostNote:
+      type: object
+      required: [id, text, x, y]
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        x:
+          type: number
+          format: float
+        y:
+          type: number
+          format: float
+
+    Post:
+      type: object
+      required: [id, title, file, tags, notes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        file:
+          $ref: '#/components/schemas/File'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostNote'
+
+    UpdatePostNote:
+      type: object
+      required: [text, x, y]
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        text:
+          type: string
+        x:
+          type: number
+          format: float
+        y:
+          type: number
+          format: float
+
+    UpdatePost:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        add_tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        remove_tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdatePostNote'
+          nullable: true
+
+    PaginationMode:
+      type: string
+      enum: [offset, keyset]
+
+    KeysetDirection:
+      type: string
+      enum: [next, prev]
+
+    SearchCursor:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/PaginationMode'
+        page:
+          type: integer
+          format: int64
+        last_id:
+          type: string
+          format: uuid
+        last_score:
+          type: number
+          format: double
+        limit:
+          type: integer
+          format: int64
+        direction:
+          $ref: '#/components/schemas/KeysetDirection'
+
+    TagQuery:
+      type: object
+      properties:
+        must:
+          type: array
+          items:
+            type: string
+        should:
+          type: array
+          items:
+            type: string
+        must_not:
+          type: array
+          items:
+            type: string
+
+    SearchPostsRequest:
+      type: object
+      properties:
+        text_query:
+          type: string
+        tag_query:
+          $ref: '#/components/schemas/TagQuery'
+        cursor:
+          $ref: '#/components/schemas/SearchCursor'
+
+    KeysetPageCursor:
+      type: object
+      required: [mode, direction, last_id, last_score, limit]
+      properties:
+        mode:
+          $ref: '#/components/schemas/PaginationMode'
+        direction:
+          $ref: '#/components/schemas/KeysetDirection'
+        last_id:
+          type: string
+          format: uuid
+        last_score:
+          type: number
+          format: double
+        limit:
+          type: integer
+          format: int64
+
+    SearchPostsOffsetResponse:
+      type: object
+      required: [posts, total_pages]
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+        total_pages:
+          type: integer
+          format: int64
+
+    SearchPostsKeysetResponse:
+      type: object
+      required: [posts, has_next, has_prev]
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+        next_cursor:
+          allOf:
+            - $ref: '#/components/schemas/KeysetPageCursor'
+          nullable: true
+        prev_cursor:
+          allOf:
+            - $ref: '#/components/schemas/KeysetPageCursor'
+          nullable: true

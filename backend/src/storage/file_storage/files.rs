@@ -73,8 +73,8 @@ impl FileStorage for LocalFileStorage {
             file.write_all(&bytes).await.map_err(|_| StorageError::Io)?;
         }
 
-        let relative_path_string = relative_path_buf.to_string_lossy().to_string();
-        Ok((id, relative_path_string))
+        let full_path_string = full_destination_path.to_string_lossy().to_string();
+        Ok((id, full_path_string))
     }
 
     async fn save_temp_file(
@@ -93,12 +93,11 @@ impl FileStorage for LocalFileStorage {
                 .map_err(|_| StorageError::Io)?;
         }
 
-        fs::rename(temp_path, full_destination_path)
+        fs::rename(temp_path, &full_destination_path)
             .await
             .map_err(|_| StorageError::Io)?;
 
-        let relative_path_string = relative_path_buf.to_string_lossy().to_string();
-
-        Ok((id, relative_path_string))
+        let full_path_string = full_destination_path.to_string_lossy().to_string();
+        Ok((id, full_path_string))
     }
 }

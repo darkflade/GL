@@ -1,0 +1,82 @@
+openapi: 3.1.0
+info:
+  title: GL
+  description: ''
+  license:
+    name: ''
+  version: 0.1.0
+servers:
+  - url: http://localhost
+  - url: http://localhost:8080
+paths:
+  /api/tags/search:
+    get:
+      tags:
+      - tags
+      operationId: search_tags_docs
+      parameters:
+      - name: query
+        in: query
+        description: Search query string
+        required: true
+        schema:
+          type: string
+        example: landscape
+      responses:
+        '200':
+          description: Tags list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TagDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+components:
+  schemas:
+    ErrorBodyDoc:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    TagCategoryDoc:
+      type: string
+      enum:
+      - Artist
+      - Copyright
+      - Character
+      - General
+    TagDoc:
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - count
+      properties:
+        category:
+          $ref: '#/components/schemas/TagCategoryDoc'
+        count:
+          type: integer
+          format: int32
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+tags:
+- name: tags
+  description: Tag operations

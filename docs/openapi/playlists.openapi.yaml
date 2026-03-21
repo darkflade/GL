@@ -1,0 +1,586 @@
+openapi: 3.0.3
+info:
+  title: GL Playlists API
+  version: 0.1.0
+  description: Playlists endpoints for frontend/testing.
+servers:
+  - url: http://localhost
+  - url: http://localhost:8080
+security:
+  - cookieAuth: []
+paths:
+  /api/playlists:
+    post:
+      summary: Create playlist
+      operationId: createPlaylist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPlaylist'
+      responses:
+        '201':
+          description: Created playlist id
+          content:
+            application/json:
+              schema:
+                type: string
+                format: uuid
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/playlists/{id}:
+    get:
+      summary: Get playlist details
+      operationId: getPlaylist
+      parameters:
+        - $ref: '#/components/parameters/PlaylistId'
+      responses:
+        '200':
+          description: Playlist details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Playlist'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      summary: Update playlist and items via events
+      operationId: updatePlaylist
+      parameters:
+        - $ref: '#/components/parameters/PlaylistId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlaylist'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      summary: Delete playlist
+      operationId: deletePlaylist
+      parameters:
+        - $ref: '#/components/parameters/PlaylistId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/playlists/search:
+    get:
+      summary: Search my playlists (keyset)
+      operationId: searchPlaylists
+      description: Current backend expects JSON body even for GET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaylistSearchRequest'
+      responses:
+        '200':
+          description: Search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchPlaylistsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: id
+
+  parameters:
+    PlaylistId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    TagCategory:
+      type: string
+      enum: [Artist, Copyright, Character, General]
+
+    FileType:
+      type: string
+      enum: [Picture, Video, Audio]
+
+    FileMeta:
+      type: object
+      properties:
+        width:
+          type: integer
+          format: int32
+          nullable: true
+        height:
+          type: integer
+          format: int32
+          nullable: true
+        extension:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          format: int64
+          nullable: true
+
+    File:
+      type: object
+      required: [id, path, media_type]
+      properties:
+        id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        hash:
+          type: string
+          nullable: true
+        media_type:
+          $ref: '#/components/schemas/FileType'
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/FileMeta'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        thumbnail:
+          nullable: true
+
+    Tag:
+      type: object
+      required: [id, name, category, count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/TagCategory'
+        count:
+          type: integer
+          format: int32
+
+    PostNote:
+      type: object
+      required: [id, text, x, y]
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        x:
+          type: number
+          format: float
+        y:
+          type: number
+          format: float
+
+    Post:
+      type: object
+      required: [id, title, file, tags, notes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        file:
+          $ref: '#/components/schemas/File'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostNote'
+
+    PlaylistContent:
+      oneOf:
+        - type: object
+          required: [Post]
+          properties:
+            Post:
+              $ref: '#/components/schemas/Post'
+        - type: object
+          required: [Note]
+          properties:
+            Note:
+              type: string
+
+    PlaylistItem:
+      type: object
+      required: [id, position, content]
+      properties:
+        id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          format: int32
+          minimum: 1
+        content:
+          $ref: '#/components/schemas/PlaylistContent'
+
+    Playlist:
+      type: object
+      required: [id, title, tags, items]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        cover:
+          type: string
+          format: uuid
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaylistItem'
+
+    PlaylistSummary:
+      type: object
+      required: [id, title, description, item_count, tags]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        cover:
+          type: string
+          format: uuid
+          nullable: true
+        item_count:
+          type: integer
+          format: int64
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+
+    PaginationMode:
+      type: string
+      enum: [offset, keyset]
+
+    KeysetDirection:
+      type: string
+      enum: [next, prev]
+
+    KeysetPageCursor:
+      type: object
+      required: [mode, direction, last_id, last_score, limit]
+      properties:
+        mode:
+          $ref: '#/components/schemas/PaginationMode'
+        direction:
+          $ref: '#/components/schemas/KeysetDirection'
+        last_id:
+          type: string
+          format: uuid
+        last_score:
+          type: number
+          format: double
+        limit:
+          type: integer
+          format: int64
+
+    TagQuery:
+      type: object
+      properties:
+        must:
+          type: array
+          items:
+            type: string
+        should:
+          type: array
+          items:
+            type: string
+        must_not:
+          type: array
+          items:
+            type: string
+
+    SearchCursor:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/PaginationMode'
+        page:
+          type: integer
+          format: int64
+        last_id:
+          type: string
+          format: uuid
+        last_score:
+          type: number
+          format: double
+        limit:
+          type: integer
+          format: int64
+        direction:
+          $ref: '#/components/schemas/KeysetDirection'
+
+    PlaylistSearchRequest:
+      type: object
+      properties:
+        text_query:
+          type: string
+        tag_query:
+          $ref: '#/components/schemas/TagQuery'
+        cursor:
+          $ref: '#/components/schemas/SearchCursor'
+
+    SearchPlaylistsResponse:
+      type: object
+      required: [playlists, has_next, has_prev]
+      properties:
+        playlists:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaylistSummary'
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+        next_cursor:
+          allOf:
+            - $ref: '#/components/schemas/KeysetPageCursor'
+          nullable: true
+        prev_cursor:
+          allOf:
+            - $ref: '#/components/schemas/KeysetPageCursor'
+          nullable: true
+
+    NewPlaylistItemContent:
+      oneOf:
+        - type: object
+          required: [type, post_id]
+          properties:
+            type:
+              type: string
+              enum: [post]
+            post_id:
+              type: string
+              format: uuid
+        - type: object
+          required: [type, text]
+          properties:
+            type:
+              type: string
+              enum: [note]
+            text:
+              type: string
+
+    NewPlaylistItem:
+      type: object
+      required: [position, content]
+      properties:
+        position:
+          type: integer
+          format: int32
+          minimum: 1
+        content:
+          $ref: '#/components/schemas/NewPlaylistItemContent'
+
+    NewPlaylist:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        cover:
+          type: string
+          format: uuid
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewPlaylistItem'
+          nullable: true
+
+    PlaylistItemEventAdd:
+      type: object
+      required: [op, content]
+      properties:
+        op:
+          type: string
+          enum: [add]
+        after_id:
+          type: string
+          format: uuid
+          nullable: true
+        content:
+          $ref: '#/components/schemas/NewPlaylistItemContent'
+
+    PlaylistItemEventEdit:
+      type: object
+      required: [op, item_id, content]
+      properties:
+        op:
+          type: string
+          enum: [edit]
+        item_id:
+          type: string
+          format: uuid
+        content:
+          $ref: '#/components/schemas/NewPlaylistItemContent'
+
+    PlaylistItemEventMove:
+      type: object
+      required: [op, item_id]
+      properties:
+        op:
+          type: string
+          enum: [move]
+        item_id:
+          type: string
+          format: uuid
+        after_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    PlaylistItemEventRemove:
+      type: object
+      required: [op, item_id]
+      properties:
+        op:
+          type: string
+          enum: [remove]
+        item_id:
+          type: string
+          format: uuid
+
+    PlaylistItemEvent:
+      oneOf:
+        - $ref: '#/components/schemas/PlaylistItemEventAdd'
+        - $ref: '#/components/schemas/PlaylistItemEventEdit'
+        - $ref: '#/components/schemas/PlaylistItemEventMove'
+        - $ref: '#/components/schemas/PlaylistItemEventRemove'
+
+    UpdatePlaylist:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        add_tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        remove_tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        cover:
+          type: string
+          format: uuid
+          nullable: true
+        item_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaylistItemEvent'
+          nullable: true

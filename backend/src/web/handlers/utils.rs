@@ -18,6 +18,7 @@ pub fn parse_uuid(value: &str, field_name: &str) -> Result<Uuid, AppError> {
 pub fn map_repo_error(error: RepoError, not_found_message: &str, context: &str) -> AppError {
     match error {
         RepoError::NotFound => AppError::not_found(not_found_message),
+        RepoError::Conflict => AppError::conflict(not_found_message),
         RepoError::StorageError => AppError::internal(format!("{context}: storage failure")),
     }
 }

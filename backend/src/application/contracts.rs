@@ -1,5 +1,6 @@
 use crate::domain::model::{
-    FileID, NoteID, PlaylistItemID, PlaylistSummary, Post, PostID, TagCategory, TagID,
+    FileID, NoteID, PlaylistItemID, PlaylistSummary, Post, PostID, Tag, TagCategory, TagID,
+    TagRelation,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -7,13 +8,53 @@ use uuid::Uuid;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NewTag {
     pub category: TagCategory,
-    pub value: String,
+    pub name: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct UpdateTag {
+pub struct TagBatchUpdate {
+    pub events: Vec<TagUpdateEvent>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum TagUpdateEvent {
+    Create { tags: Vec<NewTag> },
+    Edit { tags: Vec<TagEdit> },
+    Remove { tag_ids: Vec<TagID> },
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TagEdit {
+    pub id: TagID,
     pub category: TagCategory,
-    pub value: String,
+    pub name: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TagRelationsBatchUpdate {
+    pub events: Vec<TagRelationUpdateEvent>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum TagRelationUpdateEvent {
+    Link {
+        parent_id: TagID,
+        child_ids: Vec<TagID>,
+    },
+    Unlink {
+        parent_id: TagID,
+        child_ids: Vec<TagID>,
+    },
+    Alias {
+        tag_id: TagID,
+        alias_ids: Vec<TagID>,
+    },
+    Unalias {
+        tag_id: TagID,
+        alias_ids: Vec<TagID>,
+    },
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
@@ -175,6 +216,24 @@ pub struct SearchPostsKeysetResponse {
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct SearchPlaylistsResponse {
     pub playlists: Vec<PlaylistSummary>,
+    pub has_next: bool,
+    pub has_prev: bool,
+    pub next_cursor: Option<KeysetPageCursor>,
+    pub prev_cursor: Option<KeysetPageCursor>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct SearchTagsResponse {
+    pub tags: Vec<Tag>,
+    pub has_next: bool,
+    pub has_prev: bool,
+    pub next_cursor: Option<KeysetPageCursor>,
+    pub prev_cursor: Option<KeysetPageCursor>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct SearchTagRelationsResponse {
+    pub relations: Vec<TagRelation>,
     pub has_next: bool,
     pub has_prev: bool,
     pub next_cursor: Option<KeysetPageCursor>,

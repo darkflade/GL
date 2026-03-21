@@ -3,12 +3,19 @@ use crate::application::ports::{
 };
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
+use crate::web::api_docs::{
+    get_docs_index_html, get_openapi_service_swagger_html, get_openapi_service_yaml,
+    get_openapi_yaml,
+};
 use crate::web::handlers::files::download_file;
 use crate::web::handlers::playlists::{
     create_playlist, delete_playlist, get_my_playlists, get_playlist_details, update_playlist,
 };
 use crate::web::handlers::posts::{create_post, delete_post, get_post, search_posts, update_post};
-use crate::web::handlers::tags::search_tags;
+use crate::web::handlers::tags::{
+    get_related_tags, list_tag_relations_keyset, list_tags_keyset, search_tags,
+    update_tag_relations, update_tags,
+};
 use crate::web::handlers::users::{get_current_user, login_user, logout_user, register_user};
 use actix_identity::IdentityMiddleware;
 use actix_session::SessionMiddleware;
@@ -69,13 +76,25 @@ where
                     .service(
                         web::scope("/playlists")
                             .route("", web::post().to(create_playlist::<PR, PLR, TR, FR, FS>))
-                            .route("/search", web::post().to(get_my_playlists::<PR, PLR, TR, FR, FS>))
+                            .route(
+                                "/search",
+                                web::post().to(get_my_playlists::<PR, PLR, TR, FR, FS>),
+                            )
                             .service(
                                 web::scope("/{id}")
-                                    .route("", web::get().to(get_playlist_details::<PR, PLR, TR, FR, FS>))
-                                    .route("", web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>))
-                                    .route("", web::patch().to(update_playlist::<PR, PLR, TR, FR, FS>), ),
-                                )
+                                    .route(
+                                        "",
+                                        web::get().to(get_playlist_details::<PR, PLR, TR, FR, FS>),
+                                    )
+                                    .route(
+                                        "",
+                                        web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>),
+                                    )
+                                    .route(
+                                        "",
+                                        web::patch().to(update_playlist::<PR, PLR, TR, FR, FS>),
+                                    ),
+                            ),
                     )
                     .service(
                         web::scope("/posts")
@@ -93,11 +112,39 @@ where
                     )
                     .service(
                         web::scope("/tags")
-                            .route("/search", web::get().to(search_tags::<PR, PLR, TR, FR, FS>)),
+                            .route("", web::get().to(list_tags_keyset::<PR, PLR, TR, FR, FS>))
+                            .route("/search", web::get().to(search_tags::<PR, PLR, TR, FR, FS>))
+                            .route("", web::patch().to(update_tags::<PR, PLR, TR, FR, FS>))
+                            .route(
+                                "/relations",
+                                web::get().to(list_tag_relations_keyset::<PR, PLR, TR, FR, FS>),
+                            )
+                            .route(
+                                "/relations",
+                                web::patch().to(update_tag_relations::<PR, PLR, TR, FR, FS>),
+                            )
+                            .route(
+                                "/{id}/related",
+                                web::get().to(get_related_tags::<PR, PLR, TR, FR, FS>),
+                            ),
                     )
                     .service(
                         web::scope("/files")
                             .route("/{id}", web::get().to(download_file::<PR, PLR, TR, FR, FS>)),
+                    )
+                    .service(
+                        web::scope("/docs")
+                            .route("", web::get().to(get_docs_index_html))
+                            .route("/", web::get().to(get_docs_index_html))
+                            .route(
+                                "/files/{service_name}",
+                                web::get().to(get_openapi_service_yaml),
+                            )
+                            .route(
+                                "/plain/{service_name}",
+                                web::get().to(get_openapi_service_swagger_html),
+                            )
+                            .route("/openapi.yaml", web::get().to(get_openapi_yaml)),
                     ),
             )
     })

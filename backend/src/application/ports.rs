@@ -1,10 +1,12 @@
 use crate::application::contracts::{
     Cursor, KeysetCursor, NewPlaylist, NewPost, NewTag, NewUser, PlaylistQuery,
-    SearchPlaylistsResponse, SearchPostsKeysetResponse, SearchPostsOffsetResponse, TagQuery,
-    UpdatePlaylist, UpdatePost,
+    SearchPlaylistsResponse, SearchPostsKeysetResponse, SearchPostsOffsetResponse,
+    SearchTagRelationsResponse, SearchTagsResponse, TagBatchUpdate, TagQuery,
+    TagRelationsBatchUpdate, UpdatePlaylist, UpdatePost,
 };
 use crate::domain::model::{
-    File, FileID, Playlist, PlaylistID, Post, PostID, RepoError, Tag, User, UserID,
+    File, FileID, FileMeta, FileStatus, FileType, Playlist, PlaylistID, Post, PostID, RepoError,
+    Tag, TagID, User, UserID,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -64,6 +66,14 @@ pub trait PlaylistRepository: Send + Sync {
 pub trait TagRepository: Send + Sync {
     async fn get_or_create(&self, tag: Vec<NewTag>) -> Result<Vec<Tag>, RepoError>;
     async fn search(&self, query: &str, limit: i64) -> Result<Vec<Tag>, RepoError>;
+    async fn list_keyset(&self, cursor: KeysetCursor) -> Result<SearchTagsResponse, RepoError>;
+    async fn get_related(&self, tag_id: TagID) -> Result<Vec<Tag>, RepoError>;
+    async fn list_relations_keyset(
+        &self,
+        cursor: KeysetCursor,
+    ) -> Result<SearchTagRelationsResponse, RepoError>;
+    async fn update_tags(&self, update: TagBatchUpdate) -> Result<(), RepoError>;
+    async fn update_relations(&self, update: TagRelationsBatchUpdate) -> Result<(), RepoError>;
 }
 
 #[async_trait]
@@ -77,4 +87,13 @@ pub trait UserRepository: Send + Sync {
 pub trait FileRepository: Send + Sync {
     async fn create(&self, file_info: File) -> Result<FileID, RepoError>;
     async fn get(&self, id: FileID) -> Result<File, RepoError>;
+    async fn mark_ready(
+        &self,
+        id: FileID,
+        path: &str,
+        media_type: FileType,
+        meta: Option<FileMeta>,
+    ) -> Result<(), RepoError>;
+    async fn mark_failed(&self, id: FileID) -> Result<(), RepoError>;
+    async fn set_status(&self, id: FileID, status: FileStatus) -> Result<(), RepoError>;
 }
