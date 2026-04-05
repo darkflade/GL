@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let file_repo = PostgresFileRepository::new(pool.clone());
     let playlist_repo = PostgresPlaylistRepository::new(pool.clone());
     let user_repo = PostgresUserRepository::new(pool.clone());
-    let file_storage = LocalFileStorage::new("/media/new");
+    let file_storage = LocalFileStorage::new("/media/new/full");
 
     log::info!(
         "server startup complete, listening on http://{}:{}",

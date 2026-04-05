@@ -17,19 +17,9 @@ impl LocalFileStorage {
     pub fn new<P: Into<PathBuf>>(root: P) -> Self {
         Self { root: root.into() }
     }
-    /*
-        fn build_path(&self, id: &str, ext: Option<&str>) -> PathBuf {
-            let mut p = self.root.join(id);
-            if let Some(ext) = ext {
-                p.set_extension(ext);
-            }
-            p
-        }
-    */
+
     fn generate_rel_path(&self, id: Uuid, ext: Option<&str>) -> PathBuf {
-        let uuid_str = id.to_string();
-        let p1 = &uuid_str[0..2];
-        let p2 = &uuid_str[2..4];
+        let (p1, p2) = uuid_shards(id);
 
         let mut path = PathBuf::new();
         path.push(p1);
@@ -42,6 +32,11 @@ impl LocalFileStorage {
         }
         path
     }
+}
+
+fn uuid_shards(id: Uuid) -> (String, String) {
+    let bytes = id.as_bytes();
+    (format!("{:02x}", bytes[14]), format!("{:02x}", bytes[15]))
 }
 
 #[async_trait]

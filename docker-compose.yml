@@ -21,8 +21,8 @@ services:
       - "80:80"
     volumes:
       - ./frontend/build:/usr/share/nginx/html:ro
-      - /srv/media/new:/media/new:ro
-      - /home/darkflade/Pictures/Wallpapers:/media/old:ro
+      - ${NEW_MEDIA_HOST_PATH}:/media/new:ro
+      - ${OLD_MEDIA_HOST_PATH}:/media/old:ro
     depends_on:
       - backend
       - frontend
@@ -51,7 +51,7 @@ services:
     build: ./backend
     env_file: .env
     volumes:
-      - /srv/media/new:/media/new
+      - ${NEW_MEDIA_HOST_PATH}:/media/new
     depends_on:
       - postgres
       - redis
@@ -62,7 +62,7 @@ services:
       dockerfile: ./workers/Dockerfile.validator
     env_file: .env
     volumes:
-      - /srv/media/new:/media/new
+      - ${NEW_MEDIA_HOST_PATH}:/media/new
     depends_on:
       - postgres
       - redis
@@ -74,7 +74,7 @@ services:
     env_file: .env
     command: ["./thumbnailer_worker"]
     volumes:
-      - /srv/media/new:/media/new
+      - ${NEW_MEDIA_HOST_PATH}:/media/new
     depends_on:
       - postgres
       - redis

@@ -7,6 +7,17 @@ export interface Tag {
     count: number;
 }
 
+export interface TagRelation {
+    id: UUID;
+    parent_id: UUID;
+    parent_name: string;
+    parent_count: number;
+    child_id: UUID;
+    child_name: string;
+    child_count: number;
+    score: number;
+}
+
 export enum TagCategory {
     Artist,
     Copyright,

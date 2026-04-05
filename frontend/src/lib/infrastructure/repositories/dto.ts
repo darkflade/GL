@@ -1,5 +1,6 @@
 import type { Post } from "$lib/domain";
 import type { PlaylistSummary } from "$lib/domain/models/playlist";
+import type { Tag, TagRelation } from "$lib/domain/models/tag";
 import type { KeysetDirection } from "$lib/domain/value-objects/search";
 
 export interface KeysetCursorDto {
@@ -30,6 +31,22 @@ export interface SearchPlaylistsResponse {
     playlists: PlaylistSummary[];
     next_cursor?: KeysetCursorDto;
     prev_cursor?: KeysetCursorDto;
+    has_next: boolean;
+    has_prev: boolean;
+}
+
+export interface SearchTagsResponse {
+    tags: Tag[];
+    next_cursor?: KeysetCursorDto | null;
+    prev_cursor?: KeysetCursorDto | null;
+    has_next: boolean;
+    has_prev: boolean;
+}
+
+export interface SearchTagRelationsResponse {
+    relations: TagRelation[];
+    next_cursor?: KeysetCursorDto | null;
+    prev_cursor?: KeysetCursorDto | null;
     has_next: boolean;
     has_prev: boolean;
 }

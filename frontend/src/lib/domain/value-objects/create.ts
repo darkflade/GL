@@ -11,6 +11,12 @@ export interface NewPost {
     file_id: UUID
 }
 
+export interface CreatePostInput {
+    title: string;
+    tags: string[];
+    file: File;
+}
+
 export type NewPlaylistItemContent =
     | { type: "post"; post_id: UUID }
     | { type: "note"; text: string };

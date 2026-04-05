@@ -1,4 +1,5 @@
 use anyhow::Context;
+use redis::AsyncConnectionConfig;
 use redis::aio::MultiplexedConnection;
 use sqlx::FromRow;
 use sqlx::postgres::PgPoolOptions;
@@ -86,8 +87,9 @@ async fn main() -> anyhow::Result<()> {
 
 async fn connect_redis(url: &str) -> anyhow::Result<MultiplexedConnection> {
     let client = redis::Client::open(url).context("invalid REDIS_URL")?;
+    let config = AsyncConnectionConfig::new().set_response_timeout(None);
     let conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .context("unable to establish redis connection")?;
     Ok(conn)
@@ -137,17 +139,28 @@ async fn process_file(pool: &sqlx::PgPool, file_id: Uuid) -> anyhow::Result<()> 
 
 fn thumbnail_paths(file_id: Uuid) -> (PathBuf, PathBuf) {
     let id = file_id.to_string();
-    let shard_a = &id[0..2];
-    let shard_b = &id[2..4];
+    let (shard_a, shard_b) = uuid_shards(file_id);
 
-    let base = PathBuf::from("/media/new")
+    let small = PathBuf::from("/media/new")
         .join("thumb")
-        .join(shard_a)
-        .join(shard_b);
+        .join("480")
+        .join(&shard_a)
+        .join(&shard_b)
+        .join(&id);
 
-    let small = base.join(format!("{}_small.webp", id));
-    let large = base.join(format!("{}_large.webp", id));
+    let large = PathBuf::from("/media/new")
+        .join("thumb")
+        .join("1080")
+        .join(&shard_a)
+        .join(&shard_b)
+        .join(&id);
+
     (small, large)
+}
+
+fn uuid_shards(id: Uuid) -> (String, String) {
+    let bytes = id.as_bytes();
+    (format!("{:02x}", bytes[14]), format!("{:02x}", bytes[15]))
 }
 
 async fn ensure_parent_dirs(path: &Path) -> anyhow::Result<()> {
@@ -239,7 +252,7 @@ async fn render_frame(source: &Path, output: &Path, scale: &str) -> anyhow::Resu
         .arg("-c:v")
         .arg("libwebp")
         .arg("-quality")
-        .arg("80")
+        .arg("95")
         .arg(output)
         .status()
         .await
@@ -269,7 +282,7 @@ async fn render_video_frame(source: &Path, output: &Path, scale: &str) -> anyhow
         .arg("-c:v")
         .arg("libwebp")
         .arg("-quality")
-        .arg("80")
+        .arg("95")
         .arg(output)
         .status()
         .await
@@ -298,7 +311,7 @@ async fn render_audio_cover(source: &Path, output: &Path, scale: &str) -> anyhow
         .arg("-c:v")
         .arg("libwebp")
         .arg("-quality")
-        .arg("80")
+        .arg("95")
         .arg(output)
         .status()
         .await

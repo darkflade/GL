@@ -1,6 +1,7 @@
 use anyhow::Context;
 use infer::MatcherType;
 use redis::AsyncCommands;
+use redis::AsyncConnectionConfig;
 use redis::aio::MultiplexedConnection;
 use sqlx::FromRow;
 use sqlx::postgres::PgPoolOptions;
@@ -88,8 +89,9 @@ async fn main() -> anyhow::Result<()> {
 
 async fn connect_redis(url: &str) -> anyhow::Result<MultiplexedConnection> {
     let client = redis::Client::open(url).context("invalid REDIS_URL")?;
+    let config = AsyncConnectionConfig::new().set_response_timeout(None);
     let conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .context("unable to establish redis connection")?;
     Ok(conn)

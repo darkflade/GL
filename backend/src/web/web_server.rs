@@ -7,7 +7,7 @@ use crate::web::api_docs::{
     get_docs_index_html, get_openapi_service_swagger_html, get_openapi_service_yaml,
     get_openapi_yaml,
 };
-use crate::web::handlers::files::download_file;
+use crate::web::handlers::files::{download_file, download_thumb};
 use crate::web::handlers::playlists::{
     create_playlist, delete_playlist, get_my_playlists, get_playlist_details, update_playlist,
 };
@@ -130,7 +130,14 @@ where
                     )
                     .service(
                         web::scope("/files")
-                            .route("/{id}", web::get().to(download_file::<PR, PLR, TR, FR, FS>)),
+                            .route(
+                                "/full/{id}",
+                                web::get().to(download_file::<PR, PLR, TR, FR, FS>),
+                            )
+                            .route(
+                                "/thumb/{id}",
+                                web::get().to(download_thumb::<PR, PLR, TR, FR, FS>),
+                            ),
                     )
                     .service(
                         web::scope("/docs")

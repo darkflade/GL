@@ -5,10 +5,197 @@ info:
   license:
     name: ''
   version: 0.1.0
-servers:
-  - url: http://localhost
-  - url: http://localhost:8080
 paths:
+  /api/tags:
+    get:
+      tags:
+      - tags
+      operationId: list_tags_docs
+      parameters:
+      - name: mode
+        in: query
+        description: Pagination mode
+        required: false
+        schema:
+          $ref: '#/components/schemas/PaginationModeDoc'
+      - name: last_id
+        in: query
+        description: Last entity id for keyset pagination
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: last_score
+        in: query
+        description: Last entity score for keyset pagination
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: limit
+        in: query
+        description: Page size
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: direction
+        in: query
+        description: Keyset pagination direction
+        required: false
+        schema:
+          $ref: '#/components/schemas/KeysetDirectionDoc'
+      responses:
+        '200':
+          description: Tags list with keyset pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchTagsResponseDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+    patch:
+      tags:
+      - tags
+      operationId: update_tags_docs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagBatchUpdateDoc'
+        required: true
+      responses:
+        '204':
+          description: Tags updated
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+  /api/tags/relations:
+    get:
+      tags:
+      - tags
+      operationId: list_tag_relations_docs
+      parameters:
+      - name: mode
+        in: query
+        description: Pagination mode
+        required: false
+        schema:
+          $ref: '#/components/schemas/PaginationModeDoc'
+      - name: last_id
+        in: query
+        description: Last relation id for keyset pagination
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: last_score
+        in: query
+        description: Last relation score for keyset pagination
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: limit
+        in: query
+        description: Page size
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: direction
+        in: query
+        description: Keyset pagination direction
+        required: false
+        schema:
+          $ref: '#/components/schemas/KeysetDirectionDoc'
+      responses:
+        '200':
+          description: Tag relations list with keyset pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchTagRelationsResponseDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+    patch:
+      tags:
+      - tags
+      operationId: update_tag_relations_docs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagRelationsBatchUpdateDoc'
+        required: true
+      responses:
+        '204':
+          description: Tag relations updated
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
   /api/tags/search:
     get:
       tags:
@@ -43,6 +230,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBodyDoc'
+  /api/tags/{id}/related:
+    get:
+      tags:
+      - tags
+      operationId: get_related_tags_docs
+      parameters:
+      - name: id
+        in: path
+        description: Tag id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Related tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TagDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
 components:
   schemas:
     ErrorBodyDoc:
@@ -52,6 +279,134 @@ components:
       properties:
         error:
           type: string
+    KeysetDirectionDoc:
+      type: string
+      enum:
+      - next
+      - prev
+    KeysetPageCursorDoc:
+      type: object
+      required:
+      - mode
+      - direction
+      - last_id
+      - last_score
+      - limit
+      properties:
+        direction:
+          $ref: '#/components/schemas/KeysetDirectionDoc'
+        last_id:
+          type: string
+          format: uuid
+        last_score:
+          type: number
+          format: double
+        limit:
+          type: integer
+          format: int64
+        mode:
+          $ref: '#/components/schemas/PaginationModeDoc'
+    NewTagDoc:
+      type: object
+      required:
+      - category
+      - name
+      properties:
+        category:
+          $ref: '#/components/schemas/TagCategoryDoc'
+        name:
+          type: string
+    PaginationModeDoc:
+      type: string
+      enum:
+      - offset
+      - keyset
+    SearchCursorDoc:
+      type: object
+      properties:
+        direction:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetDirectionDoc'
+        last_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        last_score:
+          type:
+          - number
+          - 'null'
+          format: double
+        limit:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        mode:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/PaginationModeDoc'
+        page:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    SearchTagRelationsResponseDoc:
+      type: object
+      required:
+      - relations
+      - has_next
+      - has_prev
+      properties:
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+        next_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+        prev_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagRelationDoc'
+    SearchTagsResponseDoc:
+      type: object
+      required:
+      - tags
+      - has_next
+      - has_prev
+      properties:
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+        next_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+        prev_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagDoc'
+    TagBatchUpdateDoc:
+      type: object
+      required:
+      - events
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagUpdateEventDoc'
     TagCategoryDoc:
       type: string
       enum:
@@ -77,6 +432,179 @@ components:
           format: uuid
         name:
           type: string
+    TagEditDoc:
+      type: object
+      required:
+      - id
+      - category
+      - name
+      properties:
+        category:
+          $ref: '#/components/schemas/TagCategoryDoc'
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    TagRelationDoc:
+      type: object
+      required:
+      - id
+      - parent_id
+      - parent_name
+      - parent_count
+      - child_id
+      - child_name
+      - child_count
+      - score
+      properties:
+        child_count:
+          type: integer
+          format: int32
+        child_id:
+          type: string
+          format: uuid
+        child_name:
+          type: string
+        id:
+          type: string
+          format: uuid
+        parent_count:
+          type: integer
+          format: int32
+        parent_id:
+          type: string
+          format: uuid
+        parent_name:
+          type: string
+        score:
+          type: integer
+          format: int32
+    TagRelationUpdateEventDoc:
+      oneOf:
+      - type: object
+        required:
+        - parent_id
+        - child_ids
+        - op
+        properties:
+          child_ids:
+            type: array
+            items:
+              type: string
+              format: uuid
+          op:
+            type: string
+            enum:
+            - link
+          parent_id:
+            type: string
+            format: uuid
+      - type: object
+        required:
+        - parent_id
+        - child_ids
+        - op
+        properties:
+          child_ids:
+            type: array
+            items:
+              type: string
+              format: uuid
+          op:
+            type: string
+            enum:
+            - unlink
+          parent_id:
+            type: string
+            format: uuid
+      - type: object
+        required:
+        - tag_id
+        - alias_ids
+        - op
+        properties:
+          alias_ids:
+            type: array
+            items:
+              type: string
+              format: uuid
+          op:
+            type: string
+            enum:
+            - alias
+          tag_id:
+            type: string
+            format: uuid
+      - type: object
+        required:
+        - tag_id
+        - alias_ids
+        - op
+        properties:
+          alias_ids:
+            type: array
+            items:
+              type: string
+              format: uuid
+          op:
+            type: string
+            enum:
+            - unalias
+          tag_id:
+            type: string
+            format: uuid
+    TagRelationsBatchUpdateDoc:
+      type: object
+      required:
+      - events
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagRelationUpdateEventDoc'
+    TagUpdateEventDoc:
+      oneOf:
+      - type: object
+        required:
+        - tags
+        - op
+        properties:
+          op:
+            type: string
+            enum:
+            - create
+          tags:
+            type: array
+            items:
+              $ref: '#/components/schemas/NewTagDoc'
+      - type: object
+        required:
+        - tags
+        - op
+        properties:
+          op:
+            type: string
+            enum:
+            - edit
+          tags:
+            type: array
+            items:
+              $ref: '#/components/schemas/TagEditDoc'
+      - type: object
+        required:
+        - tag_ids
+        - op
+        properties:
+          op:
+            type: string
+            enum:
+            - remove
+          tag_ids:
+            type: array
+            items:
+              type: string
+              format: uuid
 tags:
 - name: tags
   description: Tag operations

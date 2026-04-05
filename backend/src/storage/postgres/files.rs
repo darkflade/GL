@@ -27,6 +27,7 @@ impl FileRepository for PostgresFileRepository {
             r#"
                 INSERT INTO files (id, path, hash, media_type, meta)
                 VALUES ($1, $2, $3, $4, $5)
+
             "#,
             file.id,
             file.path.to_string_lossy().to_string(),

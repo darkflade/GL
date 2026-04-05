@@ -6,6 +6,7 @@
     import Header from "$lib/shared/components/layout/Header.svelte";
     import EmptyList from "$lib/shared/components/layout/EmptyList.svelte";
     import PostSearchControls from "$lib/features/feed/components/PostSearchControls.svelte";
+    import { ApiError } from "$lib/infrastructure/http/client";
     import {
         applyPaginationMode,
         buildSearchHref,
@@ -35,6 +36,8 @@
     let hasNext = $state(false);
     let prevCursor = $state<KeysetCursorDto | null>(null);
     let nextCursor = $state<KeysetCursorDto | null>(null);
+    let fetchError = $state("");
+    let unauthorized = $state(false);
 
     function normalizeKeysetQuery(query: SearchPostsQuery): SearchPostsQuery {
         const withMode = applyPaginationMode(query, "keyset");
@@ -76,6 +79,8 @@
 
     async function fetchPlaylists(filters: SearchPostsQuery) {
         loading = true;
+        fetchError = "";
+        unauthorized = false;
         try {
             const response = await searchPlaylists(repositories.playlists, filters);
             playlists = response.playlists;
@@ -90,9 +95,22 @@
             hasNext = false;
             prevCursor = null;
             nextCursor = null;
+            if (error instanceof ApiError && error.code === 401) {
+                unauthorized = true;
+                fetchError = "Session expired or missing. Please sign in.";
+            } else if (error instanceof Error) {
+                fetchError = error.message;
+            } else {
+                fetchError = "Failed to load playlists.";
+            }
         } finally {
             loading = false;
         }
+    }
+
+    function getSignInHref(): string {
+        const redirectTo = `${page.url.pathname}${page.url.search}`;
+        return `/auth/login?redirect=${encodeURIComponent(redirectTo)}`;
     }
 
     async function handleSearchQuery(query: SearchPostsQuery) {
@@ -169,6 +187,13 @@
             <div class="flex items-center justify-center h-64">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
             </div>
+        {:else if fetchError}
+            <section class="error-box">
+                <p>{fetchError}</p>
+                {#if unauthorized}
+                    <a class="login-link" href={getSignInHref()}>Sign In</a>
+                {/if}
+            </section>
         {:else if playlists.length === 0}
             <EmptyList />
         {:else}
@@ -271,5 +296,32 @@
         padding: 0.1rem 0.45rem;
         font-size: 0.75rem;
         color: #374151;
+    }
+
+    .error-box {
+        margin: 1rem;
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        border-radius: 10px;
+        padding: 0.8rem;
+        color: #991b1b;
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+    }
+
+    .error-box p {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .login-link {
+        border: 1px solid #991b1b;
+        color: #991b1b;
+        border-radius: 8px;
+        padding: 0.25rem 0.6rem;
+        text-decoration: none;
+        font-weight: 600;
+        background: #fff;
     }
 </style>

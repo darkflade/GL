@@ -25,6 +25,18 @@ pub struct TagDoc {
 }
 
 #[derive(Serialize, ToSchema)]
+pub struct TagRelationDoc {
+    pub id: Uuid,
+    pub parent_id: Uuid,
+    pub parent_name: String,
+    pub parent_count: i32,
+    pub child_id: Uuid,
+    pub child_name: String,
+    pub child_count: i32,
+    pub score: i32,
+}
+
+#[derive(Serialize, ToSchema)]
 pub struct NewTagDoc {
     pub category: TagCategoryDoc,
     pub name: String,
@@ -124,6 +136,24 @@ pub struct SearchQueryDoc {
 }
 
 #[derive(Serialize, ToSchema)]
+pub struct SearchTagsResponseDoc {
+    pub tags: Vec<TagDoc>,
+    pub has_next: bool,
+    pub has_prev: bool,
+    pub next_cursor: Option<KeysetPageCursorDoc>,
+    pub prev_cursor: Option<KeysetPageCursorDoc>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct SearchTagRelationsResponseDoc {
+    pub relations: Vec<TagRelationDoc>,
+    pub has_next: bool,
+    pub has_prev: bool,
+    pub next_cursor: Option<KeysetPageCursorDoc>,
+    pub prev_cursor: Option<KeysetPageCursorDoc>,
+}
+
+#[derive(Serialize, ToSchema)]
 pub enum FileTypeDoc {
     Picture,
     Video,
@@ -212,9 +242,16 @@ pub struct UpdatePostDoc {
 
 #[derive(Serialize, ToSchema)]
 pub struct CreatePostMultipartDoc {
+    #[schema(example = r#"{"title":"My post","tags":["landscape","night"]}"#)]
     pub meta: String,
     #[schema(value_type = String, format = Binary)]
     pub file: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CreatePostMetaDoc {
+    pub title: String,
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -313,6 +350,25 @@ pub struct SearchPlaylistsResponseDoc {
 
 #[utoipa::path(
     get,
+    path = "/api/tags",
+    params(
+        ("mode" = Option<PaginationModeDoc>, Query, description = "Pagination mode"),
+        ("last_id" = Option<Uuid>, Query, description = "Last entity id for keyset pagination"),
+        ("last_score" = Option<f64>, Query, description = "Last entity score for keyset pagination"),
+        ("limit" = Option<i64>, Query, description = "Page size"),
+        ("direction" = Option<KeysetDirectionDoc>, Query, description = "Keyset pagination direction")
+    ),
+    responses(
+        (status = 200, description = "Tags list with keyset pagination", body = SearchTagsResponseDoc),
+        (status = 400, description = "Bad request", body = ErrorBodyDoc),
+        (status = 500, description = "Internal server error", body = ErrorBodyDoc)
+    ),
+    tag = "tags"
+)]
+fn list_tags_docs() {}
+
+#[utoipa::path(
+    get,
     path = "/api/tags/search",
     params(
         ("query" = String, Query, description = "Search query string", example = "landscape")
@@ -358,6 +414,25 @@ fn get_related_tags_docs() {}
 fn update_tags_docs() {}
 
 #[utoipa::path(
+    get,
+    path = "/api/tags/relations",
+    params(
+        ("mode" = Option<PaginationModeDoc>, Query, description = "Pagination mode"),
+        ("last_id" = Option<Uuid>, Query, description = "Last relation id for keyset pagination"),
+        ("last_score" = Option<f64>, Query, description = "Last relation score for keyset pagination"),
+        ("limit" = Option<i64>, Query, description = "Page size"),
+        ("direction" = Option<KeysetDirectionDoc>, Query, description = "Keyset pagination direction")
+    ),
+    responses(
+        (status = 200, description = "Tag relations list with keyset pagination", body = SearchTagRelationsResponseDoc),
+        (status = 400, description = "Bad request", body = ErrorBodyDoc),
+        (status = 500, description = "Internal server error", body = ErrorBodyDoc)
+    ),
+    tag = "tags"
+)]
+fn list_tag_relations_docs() {}
+
+#[utoipa::path(
     patch,
     path = "/api/tags/relations",
     request_body = TagRelationsBatchUpdateDoc,
@@ -391,7 +466,7 @@ fn search_posts_docs() {}
     request_body(
         content = CreatePostMultipartDoc,
         content_type = "multipart/form-data",
-        description = "Multipart body with `meta` JSON string and `file` binary"
+        description = "Multipart body with `meta` JSON string and `file` binary. `meta` must be sent before `file`."
     ),
     responses(
         (status = 201, description = "Created post id", body = Uuid),
@@ -450,6 +525,41 @@ fn delete_post_docs() {}
     tag = "posts"
 )]
 fn update_post_docs() {}
+
+#[utoipa::path(
+    get,
+    path = "/api/files/full/{id}",
+    params(
+        ("id" = Uuid, Path, description = "File id")
+    ),
+    responses(
+        (status = 200, description = "Internal redirect to full file"),
+        (status = 400, description = "Bad request", body = ErrorBodyDoc),
+        (status = 404, description = "File not found", body = ErrorBodyDoc),
+        (status = 409, description = "File is not ready", body = ErrorBodyDoc),
+        (status = 500, description = "Internal server error", body = ErrorBodyDoc)
+    ),
+    tag = "posts"
+)]
+fn download_file_docs() {}
+
+#[utoipa::path(
+    get,
+    path = "/api/files/thumb/{id}",
+    params(
+        ("id" = Uuid, Path, description = "File id"),
+        ("size" = Option<String>, Query, description = "Thumbnail size, one of: small, large", example = "small")
+    ),
+    responses(
+        (status = 200, description = "Internal redirect to thumbnail file"),
+        (status = 400, description = "Bad request", body = ErrorBodyDoc),
+        (status = 404, description = "File not found", body = ErrorBodyDoc),
+        (status = 409, description = "File is not ready", body = ErrorBodyDoc),
+        (status = 500, description = "Internal server error", body = ErrorBodyDoc)
+    ),
+    tag = "posts"
+)]
+fn download_thumb_docs() {}
 
 #[utoipa::path(
     post,
@@ -534,13 +644,16 @@ fn update_playlist_docs() {}
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        list_tags_docs,
         search_tags_docs,
         get_related_tags_docs,
         update_tags_docs,
+        list_tag_relations_docs,
         update_tag_relations_docs
     ),
     components(schemas(
         TagDoc,
+        TagRelationDoc,
         NewTagDoc,
         TagEditDoc,
         TagBatchUpdateDoc,
@@ -548,6 +661,12 @@ fn update_playlist_docs() {}
         TagRelationsBatchUpdateDoc,
         TagRelationUpdateEventDoc,
         TagCategoryDoc,
+        SearchTagsResponseDoc,
+        SearchTagRelationsResponseDoc,
+        SearchCursorDoc,
+        KeysetPageCursorDoc,
+        PaginationModeDoc,
+        KeysetDirectionDoc,
         ErrorBodyDoc
     )),
     tags(
@@ -563,7 +682,9 @@ pub struct TagsApiDoc;
         create_post_docs,
         get_post_docs,
         delete_post_docs,
-        update_post_docs
+        update_post_docs,
+        download_file_docs,
+        download_thumb_docs
     ),
     components(schemas(
         ErrorBodyDoc,
@@ -585,7 +706,8 @@ pub struct TagsApiDoc;
         SearchPostsResponseDoc,
         UpdatePostNoteDoc,
         UpdatePostDoc,
-        CreatePostMultipartDoc
+        CreatePostMultipartDoc,
+        CreatePostMetaDoc
     )),
     tags(
         (name = "posts", description = "Post operations")
@@ -600,7 +722,9 @@ pub struct PostsApiDoc;
         create_playlist_docs,
         get_playlist_details_docs,
         delete_playlist_docs,
-        update_playlist_docs
+        update_playlist_docs,
+        download_file_docs,
+        download_thumb_docs
     ),
     components(schemas(
         ErrorBodyDoc,

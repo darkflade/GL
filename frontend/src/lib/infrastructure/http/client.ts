@@ -1,8 +1,6 @@
-import type { ErrorResponse } from "$lib/domain/value-objects/error";
-
 const BASE_URL = "/api";
 
-class ApiError extends Error {
+export class ApiError extends Error {
     code?: number;
 
     constructor(message: string, code?: number) {
@@ -12,10 +10,20 @@ class ApiError extends Error {
     }
 }
 
-function isErrorResponse(value: unknown): value is ErrorResponse {
+interface BackendErrorBody {
+    code?: number;
+    message?: string;
+    error?: string;
+}
+
+function isBackendErrorBody(value: unknown): value is BackendErrorBody {
     if (!value || typeof value !== "object") return false;
-    const candidate = value as ErrorResponse;
-    return typeof candidate.message === "string" && typeof candidate.code === "number";
+    const candidate = value as BackendErrorBody;
+    return (
+        typeof candidate.message === "string" ||
+        typeof candidate.error === "string" ||
+        typeof candidate.code === "number"
+    );
 }
 
 async function readBody(response: Response): Promise<unknown> {
@@ -24,6 +32,17 @@ async function readBody(response: Response): Promise<unknown> {
         return response.json();
     }
     return response.text();
+}
+
+function toApiError(errorBody: unknown, fallbackStatus: number): ApiError {
+    if (isBackendErrorBody(errorBody)) {
+        const message = errorBody.message ?? errorBody.error ?? `Error ${fallbackStatus}`;
+        const code = errorBody.code ?? fallbackStatus;
+        return new ApiError(message, code);
+    }
+
+    const message = typeof errorBody === "string" && errorBody.trim() ? errorBody : `Error ${fallbackStatus}`;
+    return new ApiError(message, fallbackStatus);
 }
 
 export async function request<T>(
@@ -41,11 +60,7 @@ export async function request<T>(
 
     if (!response.ok) {
         const errorBody = await readBody(response)
-        if (isErrorResponse(errorBody)) {
-            throw new ApiError(errorBody.message, errorBody.code)
-        }
-        const errorText = typeof errorBody === "string" && errorBody.trim() ? errorBody : `Error ${response.status}`
-        throw new ApiError(errorText)
+        throw toApiError(errorBody, response.status)
     }
 
     if (response.status === 204) return {} as T
@@ -74,11 +89,7 @@ export const api = {
         })
         if (!response.ok) {
             const errorBody = await readBody(response)
-            if (isErrorResponse(errorBody)) {
-                throw new ApiError(errorBody.message, errorBody.code)
-            }
-            const errorText = typeof errorBody === "string" && errorBody.trim() ? errorBody : `Error ${response.status}`
-            throw new ApiError(errorText)
+            throw toApiError(errorBody, response.status)
         }
         return await readBody(response) as T
     }

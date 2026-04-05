@@ -4,6 +4,7 @@ import type { Post } from "$lib/domain/models/post";
 import type { SearchPostsQuery } from "$lib/domain/value-objects/search";
 import type { UUID } from "$lib/domain";
 import type { SearchPostsResponse } from "$lib/infrastructure/repositories/dto";
+import type { CreatePostInput } from "$lib/domain/value-objects/create";
 
 export const postsHttpRepository: PostsRepository = {
     searchPosts: (query: SearchPostsQuery) => {
@@ -34,5 +35,17 @@ export const postsHttpRepository: PostsRepository = {
     },
     getPostByID(id: UUID): Promise<Post> {
         return api.get<Post>(`/posts/${id}`)
+    },
+    createPost(input: CreatePostInput): Promise<UUID> {
+        const formData = new FormData();
+        formData.append(
+            "meta",
+            JSON.stringify({
+                title: input.title,
+                tags: input.tags,
+            })
+        );
+        formData.append("file", input.file);
+        return api.upload<UUID>("/posts", formData);
     }
 };

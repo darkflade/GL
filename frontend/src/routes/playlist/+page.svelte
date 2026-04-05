@@ -6,11 +6,14 @@
     import Header from "$lib/shared/components/layout/Header.svelte";
     import EmptyList from "$lib/shared/components/layout/EmptyList.svelte";
     import PostCard from "$lib/features/feed/components/PostCard.svelte";
+    import { ApiError } from "$lib/infrastructure/http/client";
     import type { Playlist } from "$lib/domain/models/playlist";
     import type { UUID } from "$lib/domain";
 
     let loading = $state(false);
     let playlist = $state<Playlist | null>(null);
+    let fetchError = $state("");
+    let unauthorized = $state(false);
 
     $effect(() => {
         const id = page.url.searchParams.get("id") as UUID | null;
@@ -28,14 +31,31 @@
 
     async function fetchPlaylist(id: UUID) {
         loading = true;
+        fetchError = "";
+        unauthorized = false;
         try {
             playlist = await getPlaylist(repositories.playlists, id);
         } catch (error) {
             console.error(error);
             playlist = null;
+            if (error instanceof ApiError && error.code === 401) {
+                unauthorized = true;
+                fetchError = "Session expired or missing. Please sign in.";
+            } else if (error instanceof ApiError && error.code === 404) {
+                fetchError = "Playlist not found.";
+            } else if (error instanceof Error) {
+                fetchError = error.message;
+            } else {
+                fetchError = "Failed to load playlist.";
+            }
         } finally {
             loading = false;
         }
+    }
+
+    function getSignInHref(): string {
+        const redirectTo = `${page.url.pathname}${page.url.search}`;
+        return `/auth/login?redirect=${encodeURIComponent(redirectTo)}`;
     }
 </script>
 
@@ -51,6 +71,13 @@
             <div class="flex items-center justify-center h-64">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
             </div>
+        {:else if fetchError}
+            <section class="error-box">
+                <p>{fetchError}</p>
+                {#if unauthorized}
+                    <a class="login-link" href={getSignInHref()}>Sign In</a>
+                {/if}
+            </section>
         {:else if !playlist}
             <EmptyList />
         {:else}
@@ -143,5 +170,32 @@
         padding: 0.1rem 0.45rem;
         font-size: 0.75rem;
         color: #374151;
+    }
+
+    .error-box {
+        margin: 1rem;
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        border-radius: 10px;
+        padding: 0.8rem;
+        color: #991b1b;
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+    }
+
+    .error-box p {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .login-link {
+        border: 1px solid #991b1b;
+        color: #991b1b;
+        border-radius: 8px;
+        padding: 0.25rem 0.6rem;
+        text-decoration: none;
+        font-weight: 600;
+        background: #fff;
     }
 </style>

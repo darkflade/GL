@@ -1,42 +1,68 @@
-# Endpoints:
+# Endpoints
 
-## Playlists
-___
-### [Get]
-- playlists (in cookie user determined)
-- playlists/{id}
-### [Post]
-- playlists
-- playlists/{id}/item
-### [Patch]
-- playlists/{id}
-### [Delete]
-- playlist/{id}
+Базовый префикс: `/api`
 
 ## Posts
-___
-### [Get]
-- posts (tags in query)
-- posts/{id}
 
-### [Post]
-- posts
+### `POST /posts`
+- Создание поста через `multipart/form-data`
+- Поля: `meta` (JSON-строка), `file` (бинарник)
+- `meta` должен идти раньше `file`
 
-### [Delete]
-- posts/{id}
+### `POST /posts/search`
+- Поиск постов
+- Body: `text_query`, `tag_query`, `cursor`
 
+### `GET /posts/{id}`
+- Получить полный пост
 
+### `PATCH /posts/{id}`
+- Обновить метаданные поста, теги и заметки
 
-    GET /playlists — Список плейлистов юзера (Краткие карточки PlaylistSummary).
-    GET /playlists/{id} — Полный плейлист (PlaylistWithItems).
-    POST /playlists — Создать новый плейлист.
-    PATCH /playlists/{id} — Обновить метаданные (название, обложка).
-    DELETE /playlists/{id} — Удалить плейлист.
-    POST /playlists/{id}/items — Добавить элемент в плейлист.
+### `DELETE /posts/{id}`
+- Удалить пост
 
-    GET /posts — Поиск постов (с Query Params: ?tags=...&page=1).
-    GET /posts/{id} — Получить пост (метаданные).
-    POST /posts — Создать пост (Загрузка файла + JSON).
-    DELETE /posts/{id} — Удалить.
-  
-    GET /files/{id}
+## Tags
+
+### `GET /tags`
+- Список тегов с keyset-пагинацией
+- Query: `mode`, `last_id`, `last_score`, `limit`, `direction`
+
+### `GET /tags/search`
+- Поиск тегов по строке
+- Query: `query`
+
+### `PATCH /tags`
+- Батч-обновление тегов
+
+### `GET /tags/relations`
+- Список связей тегов с keyset-пагинацией
+- Query: `mode`, `last_id`, `last_score`, `limit`, `direction`
+
+### `PATCH /tags/relations`
+- Батч-обновление связей тегов
+
+### `GET /tags/{id}/related`
+- Получить связанные теги для конкретного тега
+
+## Playlists
+
+### `POST /playlists`
+- Создать плейлист
+
+### `POST /playlists/search`
+- Получить плейлисты пользователя
+
+### `GET /playlists/{id}`
+- Получить полный плейлист
+
+### `PATCH /playlists/{id}`
+- Обновить плейлист
+
+### `DELETE /playlists/{id}`
+- Удалить плейлист
+
+## Files
+
+### `GET /files/{id}`
+- Скачать файл

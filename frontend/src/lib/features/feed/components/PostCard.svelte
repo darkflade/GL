@@ -2,16 +2,30 @@
     import type { Post } from "$lib/domain/models/post";
     import { MediaType } from "$lib/domain";
 
-    export let post: Post;
-    export let size: string | null | undefined;
+    //export let post: Post;
+    //export let size: string | null | undefined;
+    type CardSize =  string | null | undefined;
+    interface CardProps {
+            post: Post;
+            size?: CardSize;
+    }
+
+    let {post, size = null}: CardProps = $props()
 
     const fullSize = size == "full"
 
-    $: fileUrl = `/api/files/${post.file.id}`;
-    $: mediaType = String(post.file.media_type ?? "").toLowerCase();
-    $: isPicture = mediaType === MediaType.Picture.toLowerCase();
-    $: isVideo = mediaType === MediaType.Video.toLowerCase();
-    $: isAudio = mediaType === MediaType.Audio.toLowerCase();
+    const mediaType = $derived(String(post.file.media_type ?? "").toLowerCase());
+
+    const isPicture = $derived(mediaType === "picture");
+    const isVideo = $derived(mediaType === "video");
+    const isAudio = $derived(mediaType === "audio");
+
+    const fileUrl = $derived(
+        fullSize
+            ? `/api/files/full/${post.file.id}`
+            : `/api/files/thumb/${post.file.id}?size=small`
+    );
+
 </script>
 
 <div class="card">
