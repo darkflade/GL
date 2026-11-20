@@ -3,6 +3,7 @@
     import { tagManagement, type Neighborhood } from '../management';
     import { edgeKey, relationChanges, wouldCycle, type Edge } from '../graph';
     import TagFinder from './TagFinder.svelte';
+    import TagDropTarget from './TagDropTarget.svelte';
     let { details, onSaved, onFocus, onDirty } = $props<{ details: Neighborhood; onSaved: () => Promise<void>; onFocus: (id: string) => void; onDirty: (dirty: boolean) => void }>();
     type Node = { tag: Tag; x: number; y: number };
     let nodes = $state<Node[]>([]), edges = $state<Edge[]>([]), original = $state<Edge[]>([]);
@@ -10,16 +11,26 @@
     let drag = $state<{ id: string; dx: number; dy: number } | null>(null);
     let connecting = $state<string | null>(null); let pointer = $state({ x: 0, y: 0 });
     let parent = $state(''), child = $state('');
+    let notice = $state('');
     const changes = $derived(relationChanges(original, edges));
     $effect(() => { onDirty(changes.length > 0); });
     const height = $derived(Math.max(720, ...nodes.map(node => node.y + 150)));
     $effect(() => { if (!initialized) { initialized = true; initialize(); } });
     function initialize() {
         nodes = [{ tag: details.tag, x: 370, y: 240 }];
-        edges = [...details.parents.map((tag: Tag) => ({ parent: tag.id, child: details.tag.id })), ...details.children.map((tag: Tag) => ({ parent: details.tag.id, child: tag.id }))];
+        edges = [...details.children.map((tag: Tag) => ({ parent: details.tag.id, child: tag.id }))];
         original = edges.map(edge => ({ ...edge }));
-        details.parents.slice(0, 4).forEach((tag: Tag, i: number) => nodes.push({ tag, x: 25 + i * 235, y: 35 }));
         details.children.slice(0, 8).forEach((tag: Tag, i: number) => nodes.push({ tag, x: 25 + i % 4 * 235, y: 450 + Math.floor(i / 4) * 150 }));
+    }
+    async function addRelation(tag: Tag, kind: 'child' | 'alias') {
+        if (busy) return;
+        notice = '';
+        if (tag.id === details.tag.id) { error = 'A tag cannot be its own child or alias.'; return; }
+        if (kind === 'child') { addNode(tag); connect(details.tag.id, tag.id); return; }
+        busy = true; error = '';
+        try { await tagManagement.relations([{ op: 'alias', tag_id: details.tag.id, alias_ids: [tag.id] }]); notice = `Alias added: ${tag.name}`; }
+        catch { error = 'Could not add alias. Try again.'; }
+        finally { busy = false; }
     }
     function addNode(tag: Tag) {
         if (nodes.some(node => node.tag.id === tag.id)) return;
@@ -60,10 +71,11 @@
     }
 </script>
 <svelte:window onpointermove={move} onpointerup={release} onpointercancel={() => { drag = null; connecting = null; }} />
+<TagDropTarget onAdd={addRelation} disabled={busy} targetName={details.tag.name}>
 <section class="graph-editor">
     <div class="graph-head"><div><h2>Hierarchy · {details.tag.name}</h2><p>Drag a node by its title. Drag its blue output onto another node to connect parent → child.</p></div><button class="primary" disabled={busy || !changes.length} onclick={save}>{busy ? 'Saving…' : `Save graph (${changes.length})`}</button></div>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
-    <div class="more"><span>Top-level roots:</span>{#each details.roots as root (root.id)}<button disabled={busy} onclick={() => focus(root.id)}>{root.name}</button>{/each}</div>
+    {#if notice}<p role="status">{notice}</p>{/if}
     <div class="graph-tools">
         <TagFinder label="Add tag to graph" exclude={nodes.map(node => node.tag.id)} onSelect={addNode} />
         <div class="keyboard"><label>Parent<select bind:value={parent}><option value="">Choose…</option>{#each nodes as node (node.tag.id)}<option value={node.tag.id}>{node.tag.name}</option>{/each}</select></label><label>Child<select bind:value={child}><option value="">Choose…</option>{#each nodes as node (node.tag.id)}<option value={node.tag.id}>{node.tag.name}</option>{/each}</select></label><button disabled={busy || !parent || !child} onclick={() => connect(parent, child)}>Connect →</button></div>
@@ -81,9 +93,10 @@
             </div>
         {/each}
     </div></div>
-    <div class="more"><button disabled={busy} onclick={() => details.parents.forEach(addNode)}>Show all parents ({details.parents.length})</button><button disabled={busy} onclick={() => details.children.forEach(addNode)}>Show all children ({details.children.length})</button></div>
+    <div class="more"><button disabled={busy} onclick={() => details.children.forEach(addNode)}>Show all children ({details.children.length})</button></div>
     <details><summary>Connections ({edges.length}) · remove branches</summary><div class="edge-list">{#each edges as edge (edgeKey(edge))}<div><span>{name(edge.parent)} → {name(edge.child)}</span><button disabled={busy} onclick={() => edges = edges.filter(item => edgeKey(item) !== edgeKey(edge))}>Unlink</button></div>{/each}</div></details>
 </section>
+</TagDropTarget>
 <style>
     .graph-editor { display: grid; gap: 1rem; min-width: 0; } .graph-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; } h2 { font-size: 1.2rem; font-weight: 600; } p,small { color: #64748b; font-size: .85rem; } button,select { border: 1px solid #cbd5e1; border-radius: 7px; padding: .4rem .6rem; background: white; } button { cursor: pointer; } button:disabled { opacity: .5; cursor: default; } .primary { background: #2563eb; color: white; white-space: nowrap; }
     .graph-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } .keyboard { display: flex; gap: .5rem; align-items: end; flex-wrap: wrap; } label { display: grid; gap: .25rem; font-size: .85rem; } select { max-width: 180px; }

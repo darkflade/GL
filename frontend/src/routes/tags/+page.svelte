@@ -69,7 +69,7 @@
     <main>
         <aside>
             <form onsubmit={(event) => { event.preventDefault(); void loadList(); }}><label for="tag-search">Find a tag</label><div class="search"><input id="tag-search" bind:value={query} placeholder="Name or UUID" /><button disabled={loading}>Search</button></div></form>
-            <div class="tag-list" aria-label="Tags">{#each tags as tag (tag.id)}<button class:selected={details?.tag.id === tag.id} onclick={() => selectTag(tag.id)}><span><strong>{tag.name}</strong><small>{tag.count} posts</small></span><small>{categoryName(tag.category)}</small></button>{/each}</div>
+            <div class="tag-list" aria-label="Tags">{#each tags as tag (tag.id)}<button draggable="true" ondragstart={(event) => { event.dataTransfer!.setData('application/x-gl-tag', JSON.stringify(tag)); event.dataTransfer!.effectAllowed = 'link'; }} class:selected={details?.tag.id === tag.id} onclick={() => selectTag(tag.id)}><span><strong>{tag.name}</strong><small>{tag.count} posts</small></span><small>{categoryName(tag.category)}</small></button>{/each}</div>
             {#if loading}<p role="status">Loading tags…</p>{:else if !tags.length}<p>No tags found.</p>{/if}
             {#if cursor}<button disabled={loading} onclick={() => loadList(true)}>Load more</button>{/if}
             {#if activeQuery && tags.length === 50}<small>First 50 results. Narrow your search.</small>{/if}

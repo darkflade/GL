@@ -2,10 +2,23 @@
     import type { Tag } from '$lib/domain/models/tag';
     import { categories, categoryName, tagManagement, type Neighborhood } from '../management';
     import TagFinder from './TagFinder.svelte';
+    import TagDropTarget from './TagDropTarget.svelte';
     let { details, onChanged } = $props<{ details: Neighborhood; onChanged: (id: string | null) => Promise<void> }>();
     let name = $state(''); let category = $state('General'); let busy = $state(false); let error = $state('');
     let mode = $state<'edit' | 'delete' | 'merge'>('edit'); let target = $state<Tag | null>(null); let initialized = false;
     $effect(() => { if (!initialized) { name = details.tag.name; category = categoryName(details.tag.category); initialized = true; } });
+    async function addRelation(tag: Tag, kind: 'child' | 'alias') {
+        if (busy) return;
+        if (tag.id === details.tag.id) { error = 'A tag cannot be its own child or alias.'; return; }
+        busy = true; error = '';
+        try {
+            await tagManagement.relations([kind === 'child'
+                ? { op: 'link', parent_id: details.tag.id, child_ids: [tag.id] }
+                : { op: 'alias', tag_id: details.tag.id, alias_ids: [tag.id] }]);
+            await onChanged(details.tag.id);
+        } catch { error = 'Could not add relation. A hierarchy cycle may cause a conflict.'; }
+        finally { busy = false; }
+    }
     async function save() {
         busy = true; error = '';
         try {
@@ -23,9 +36,10 @@
         finally { busy = false; }
     }
 </script>
+<TagDropTarget onAdd={addRelation} disabled={busy} targetName={details.tag.name}>
 <section>
     <h2>{details.tag.name}</h2><code>{details.tag.id}</code>
-    <dl><div><dt>Category</dt><dd>{categoryName(details.tag.category)}</dd></div><div><dt>Posts</dt><dd>{details.tag.count}</dd></div><div><dt>Parents / children / aliases</dt><dd>{details.parents.length} / {details.children.length} / {details.aliases.length}</dd></div></dl>
+    <dl><div><dt>Category</dt><dd>{categoryName(details.tag.category)}</dd></div><div><dt>Posts</dt><dd>{details.tag.count}</dd></div><div><dt>Children / aliases</dt><dd>{details.children.length} / {details.aliases.length}</dd></div></dl>
     <div class="actions"><button class:active={mode === 'edit'} onclick={() => mode = 'edit'} disabled={busy}>Edit</button><button class:active={mode === 'merge'} onclick={() => mode = 'merge'} disabled={busy}>Merge into…</button><button class:active={mode === 'delete'} onclick={() => mode = 'delete'} disabled={busy}>Delete</button></div>
     <fieldset disabled={busy}>
         {#if mode === 'edit'}
@@ -42,6 +56,7 @@
     </fieldset>
     {#if busy}<p role="status">Saving…</p>{/if}{#if error}<p class="error" role="alert">{error}</p>{/if}
 </section>
+</TagDropTarget>
 <style>
     section { display: grid; gap: 1rem; } h2 { font-size: 1.35rem; font-weight: 650; } code { font-size: .8rem; overflow-wrap: anywhere; color: #64748b; }
     dl { display: grid; gap: .5rem; } dl div { display: flex; justify-content: space-between; gap: 1rem; } dt { color: #64748b; }

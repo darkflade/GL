@@ -345,7 +345,7 @@ impl TagRepository for PostgresTagRepository {
         &self,
         id: TagID,
     ) -> Result<crate::application::contracts::TagNeighborhood, RepoError> {
-        let rows: Vec<(Uuid,i16,String,i32,i16)> = sqlx::query_as("SELECT t.id,t.category,t.name,t.post_count,0::smallint FROM tags t WHERE t.id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,1::smallint FROM tags t JOIN tag_relation_edges e ON e.parent_id=t.id WHERE e.child_id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,2::smallint FROM tags t JOIN tag_relation_edges e ON e.child_id=t.id WHERE e.parent_id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,3::smallint FROM tags t JOIN tag_aliases a ON (a.tag_id=$1 AND a.alias_id=t.id) OR (a.alias_id=$1 AND a.tag_id=t.id) UNION ALL SELECT t.id,t.category,t.name,t.post_count,4::smallint FROM tags t JOIN tag_relation_closure c ON c.ancestor_id=t.id WHERE c.descendant_id=$1 AND NOT EXISTS(SELECT 1 FROM tag_relation_edges e WHERE e.child_id=t.id) ORDER BY name")
+        let rows: Vec<(Uuid,i16,String,i32,i16)> = sqlx::query_as("SELECT t.id,t.category,t.name,t.post_count,0::smallint FROM tags t WHERE t.id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,2::smallint FROM tags t JOIN tag_relation_edges e ON e.child_id=t.id WHERE e.parent_id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,3::smallint FROM tags t JOIN tag_aliases a ON (a.tag_id=$1 AND a.alias_id=t.id) OR (a.alias_id=$1 AND a.tag_id=t.id) ORDER BY name")
             .bind(id).fetch_all(&self.pool).await.map_err(|e|Self::map_db_error(e,"tags.neighborhood"))?;
         let mut tag = None;
         let mut parents = vec![];
