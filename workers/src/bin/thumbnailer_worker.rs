@@ -359,3 +359,4 @@ async fn mark_status(pool: &sqlx::PgPool, file_id: Uuid, status: i16) -> anyhow:
         .with_context(|| format!("failed to set status {} for {}", status, file_id))?;
     Ok(())
 }
+
