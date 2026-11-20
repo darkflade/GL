@@ -1,5 +1,5 @@
 use crate::application::ports::{
-    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+    FileRepository, CollectionRepository, PostRepository, TagRepository,
 };
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
@@ -17,7 +17,7 @@ pub async fn download_file<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -78,7 +78,7 @@ pub async fn download_thumb<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -103,7 +103,7 @@ where
     let accel_prefix = media_to_accel_prefix(path_str.as_ref())?;
     let (shard_a, shard_b) = uuid_shards(file_uuid);
     let redirect_url = format!(
-        "{}/thumb/{}/{}/{}/{}",
+        "{}/thumb/{}/{}/{}/{}.webp",
         accel_prefix,
         query_params.size.as_dir(),
         shard_a,
@@ -117,7 +117,6 @@ where
         .insert_header(("X-Accel-Redirect", redirect_url))
         .finish())
 }
-
 fn map_media_path_to_accel_path(path: &str) -> Result<String, AppError> {
     if let Some(rest) = path.strip_prefix("/media/new/") {
         return Ok(format!("/protected_current/{rest}"));

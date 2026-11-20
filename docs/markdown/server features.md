@@ -1,15 +1,15 @@
 # First
 [ ] Logic for delete and edit 
-  posts/playlists/tags
+  posts/collections/tags
   Endpoints: DELETE /posts/:id, PATCH /posts/:id, POST /tags, PATCH /tags/:id, DELETE /tags/:id.
-  Post deleting: transaction post_tags, tags.post_count--, create task for deleting, delete from playlist.
+  Post deleting: transaction post_tags, tags.post_count--, create task for deleting, delete from collection.
 
-[ ] Make for playlist editing (tag/name, playlist content) Event system
+[ ] Make for collection editing (tag/name, collection content) Event system
 
-[x] Playlists system
-  Index: (playlist_id, position)
+[x] Collections system
+  Index: (collection_id, position)
   For reorder: get some space (start 1024). Ends — реassign positions.
-  Endpoints: create playlist, add item (at position), remove item, reorder (PATCH reorder with array of ids or move item API).
+  Endpoints: create collection, add item (at position), remove item, reorder (PATCH reorder with array of ids or move item API).
 
 [ ] Thumbnails system
   Save the original and then create Task(Reddis, RocketMQ, RabbitMQ)
@@ -37,7 +37,7 @@
 [ ] Metrics & monitoring
   Backend: Prometheus + Grafana (expose /metrics via prometheus crate).
   Error tracking: Sentry.
-[ ] Copy tags posts\playlists
+[ ] Copy tags posts\collections
 [ ] Group by similarity (thumbs speed up mb)
 [ ] connected tags\synonims
   UI: hint "relative tags/ similar" + checkbox "enable parent".

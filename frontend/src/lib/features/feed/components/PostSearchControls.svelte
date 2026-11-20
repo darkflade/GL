@@ -8,30 +8,36 @@ import type { PaginationMode } from "$lib/features/feed/search-query";
 
 let {
     value = "",
+    sort = "relevance",
     paginationMode = "keyset",
     onQueryChange,
 } = $props<{
     value?: string;
+    sort?: SearchPostsQuery["sort"];
     paginationMode?: PaginationMode;
     onQueryChange: (query: SearchPostsQuery) => void;
 }>();
 
 function onTagsChange(tags: Tag[]) {
-    onQueryChange(queryFromTags(tags, paginationMode));
+    onQueryChange({ ...queryFromTags(tags, paginationMode), sort });
 }
 
 function onTextSearch(searchText: string) {
-    onQueryChange(queryFromText(searchText, paginationMode));
+    onQueryChange({ ...queryFromText(searchText, paginationMode), sort });
 }
 </script>
 
 <div class="search-controls">
+    <label>Order <select aria-label="Sort by UUID" value={sort} onchange={(event) => onQueryChange({ ...queryFromText(value, paginationMode), sort: event.currentTarget.value as SearchPostsQuery["sort"] })}><option value="relevance">Relevance</option><option value="uuid_desc">UUID ↓</option><option value="uuid_asc">UUID ↑</option></select></label>
     <TextSearch value={value} onSearch={onTextSearch} />
     <TagSearch onChange={onTagsChange}/>
 </div>
 
 <style>
+    label { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
+    select { border: 1px solid #d1d5db; border-radius: 6px; padding: .35rem; }
     .search-controls {
+        flex-wrap: wrap;
         flex: 1;
         min-width: 0;
         margin-left: 1rem;

@@ -1,10 +1,10 @@
 use crate::application::ports::{
-    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+    FileRepository, CollectionRepository, PostRepository, TagRepository,
 };
 use crate::application::use_cases::files::GetFileUseCase;
-use crate::application::use_cases::playlists::{
-    CreatePlaylistUseCase, DeletePlaylistUseCase, GetAllPlaylistsUseCase, GetPlaylistUseCase,
-    SearchPlaylistsUseCase, UpdatePlaylistUseCase,
+use crate::application::use_cases::collections::{
+    CreateCollectionUseCase, DeleteCollectionUseCase, GetAllCollectionsUseCase, GetCollectionUseCase,
+    SearchCollectionsUseCase, UpdateCollectionUseCase,
 };
 use crate::application::use_cases::posts::{
     CreatePostUseCase, DeletePostUseCase, GetAllPostsKeysetUseCase, GetAllPostsUseCase,
@@ -25,13 +25,13 @@ pub struct Services<PR, PLR, TR, FR, FS> {
     pub update_post: UpdatePostUseCase<PR>,
     pub get_all_posts: GetAllPostsUseCase<PR>,
     pub get_all_posts_keyset: GetAllPostsKeysetUseCase<PR>,
-    //  Playlists
-    pub get_playlist: GetPlaylistUseCase<PLR>,
-    pub create_playlist: CreatePlaylistUseCase<PLR>,
-    pub delete_playlist: DeletePlaylistUseCase<PLR>,
-    pub update_playlist: UpdatePlaylistUseCase<PLR>,
-    pub search_playlists: SearchPlaylistsUseCase<PLR>,
-    pub get_all_playlists: GetAllPlaylistsUseCase<PLR>,
+    //  Collections
+    pub get_collection: GetCollectionUseCase<PLR>,
+    pub create_collection: CreateCollectionUseCase<PLR>,
+    pub delete_collection: DeleteCollectionUseCase<PLR>,
+    pub update_collection: UpdateCollectionUseCase<PLR>,
+    pub search_collections: SearchCollectionsUseCase<PLR>,
+    pub get_all_collections: GetAllCollectionsUseCase<PLR>,
     //  Tags
     pub search_tags: SearchTagsUseCase<TR>,
     pub list_tags_keyset: ListTagsKeysetUseCase<TR>,
@@ -48,10 +48,10 @@ where
     PR: PostRepository + Clone + Send + Sync + 'static,
     TR: TagRepository + Clone + Send + Sync + 'static,
     FR: FileRepository + Clone + Send + Sync + 'static,
-    PLR: PlaylistRepository + Clone + Send + Sync + 'static,
+    PLR: CollectionRepository + Clone + Send + Sync + 'static,
     FS: FileStorage + Clone + Send + Sync + 'static,
 {
-    pub fn new(posts: PR, playlist: PLR, tags: TR, files: FR, storage: FS) -> Self {
+    pub fn new(posts: PR, collection: PLR, tags: TR, files: FR, storage: FS) -> Self {
         Self {
             //  Posts
             create_post: CreatePostUseCase {
@@ -81,24 +81,24 @@ where
             get_all_posts_keyset: GetAllPostsKeysetUseCase {
                 repo: posts.clone(),
             },
-            //  Playlist
-            get_playlist: GetPlaylistUseCase {
-                repo: playlist.clone(),
+            //  Collection
+            get_collection: GetCollectionUseCase {
+                repo: collection.clone(),
             },
-            create_playlist: CreatePlaylistUseCase {
-                repo: playlist.clone(),
+            create_collection: CreateCollectionUseCase {
+                repo: collection.clone(),
             },
-            delete_playlist: DeletePlaylistUseCase {
-                repo: playlist.clone(),
+            delete_collection: DeleteCollectionUseCase {
+                repo: collection.clone(),
             },
-            update_playlist: UpdatePlaylistUseCase {
-                repo: playlist.clone(),
+            update_collection: UpdateCollectionUseCase {
+                repo: collection.clone(),
             },
-            search_playlists: SearchPlaylistsUseCase {
-                repo: playlist.clone(),
+            search_collections: SearchCollectionsUseCase {
+                repo: collection.clone(),
             },
-            get_all_playlists: GetAllPlaylistsUseCase {
-                repo: playlist.clone(),
+            get_all_collections: GetAllCollectionsUseCase {
+                repo: collection.clone(),
             },
             //  Tags
             search_tags: SearchTagsUseCase { repo: tags.clone() },

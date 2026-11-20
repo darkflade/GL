@@ -67,12 +67,12 @@ CREATE TABLE public.files (
 ALTER TABLE public.files OWNER TO glab;
 
 --
--- Name: playlist_items; Type: TABLE; Schema: public; Owner: glab
+-- Name: collection_items; Type: TABLE; Schema: public; Owner: glab
 --
 
-CREATE TABLE public.playlist_items (
+CREATE TABLE public.collection_items (
     id uuid DEFAULT uuidv7() NOT NULL,
-    playlist_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
     post_id uuid,
     note_text text,
     created_at timestamp with time zone DEFAULT now(),
@@ -80,25 +80,25 @@ CREATE TABLE public.playlist_items (
 );
 
 
-ALTER TABLE public.playlist_items OWNER TO glab;
+ALTER TABLE public.collection_items OWNER TO glab;
 
 --
--- Name: playlist_tags; Type: TABLE; Schema: public; Owner: glab
+-- Name: collection_tags; Type: TABLE; Schema: public; Owner: glab
 --
 
-CREATE TABLE public.playlist_tags (
-    playlist_id uuid NOT NULL,
+CREATE TABLE public.collection_tags (
+    collection_id uuid NOT NULL,
     tag_id uuid NOT NULL
 );
 
 
-ALTER TABLE public.playlist_tags OWNER TO glab;
+ALTER TABLE public.collection_tags OWNER TO glab;
 
 --
--- Name: playlists; Type: TABLE; Schema: public; Owner: glab
+-- Name: collections; Type: TABLE; Schema: public; Owner: glab
 --
 
-CREATE TABLE public.playlists (
+CREATE TABLE public.collections (
     id uuid DEFAULT uuidv7() NOT NULL,
     title text NOT NULL,
     description text,
@@ -110,7 +110,7 @@ CREATE TABLE public.playlists (
 );
 
 
-ALTER TABLE public.playlists OWNER TO glab;
+ALTER TABLE public.collections OWNER TO glab;
 
 --
 -- Name: post_notes; Type: TABLE; Schema: public; Owner: glab
@@ -249,27 +249,27 @@ ALTER TABLE ONLY public.files
 
 
 --
--- Name: playlist_items playlist_items_pkey; Type: CONSTRAINT; Schema: public; Owner: glab
+-- Name: collection_items collection_items_pkey; Type: CONSTRAINT; Schema: public; Owner: glab
 --
 
-ALTER TABLE ONLY public.playlist_items
-    ADD CONSTRAINT playlist_items_pkey PRIMARY KEY (id);
-
-
---
--- Name: playlist_tags playlist_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: glab
---
-
-ALTER TABLE ONLY public.playlist_tags
-    ADD CONSTRAINT playlist_tags_pkey PRIMARY KEY (playlist_id, tag_id);
+ALTER TABLE ONLY public.collection_items
+    ADD CONSTRAINT collection_items_pkey PRIMARY KEY (id);
 
 
 --
--- Name: playlists playlists_pkey; Type: CONSTRAINT; Schema: public; Owner: glab
+-- Name: collection_tags collection_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: glab
 --
 
-ALTER TABLE ONLY public.playlists
-    ADD CONSTRAINT playlists_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.collection_tags
+    ADD CONSTRAINT collection_tags_pkey PRIMARY KEY (collection_id, tag_id);
+
+
+--
+-- Name: collections collections_pkey; Type: CONSTRAINT; Schema: public; Owner: glab
+--
+
+ALTER TABLE ONLY public.collections
+    ADD CONSTRAINT collections_pkey PRIMARY KEY (id);
 
 
 --
@@ -361,10 +361,10 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: idx_playlist_items_order; Type: INDEX; Schema: public; Owner: glab
+-- Name: idx_collection_items_order; Type: INDEX; Schema: public; Owner: glab
 --
 
-CREATE INDEX idx_playlist_items_order ON public.playlist_items USING btree (playlist_id, rank);
+CREATE INDEX idx_collection_items_order ON public.collection_items USING btree (collection_id, rank);
 
 
 --
@@ -438,51 +438,51 @@ CREATE TRIGGER tag_count_trigger AFTER INSERT OR DELETE ON public.post_tags FOR 
 
 
 --
--- Name: playlist_items playlist_items_playlist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
+-- Name: collection_items collection_items_collection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
 --
 
-ALTER TABLE ONLY public.playlist_items
-    ADD CONSTRAINT playlist_items_playlist_id_fkey FOREIGN KEY (playlist_id) REFERENCES public.playlists(id) ON DELETE CASCADE;
-
-
---
--- Name: playlist_items playlist_items_post_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
---
-
-ALTER TABLE ONLY public.playlist_items
-    ADD CONSTRAINT playlist_items_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.collection_items
+    ADD CONSTRAINT collection_items_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES public.collections(id) ON DELETE CASCADE;
 
 
 --
--- Name: playlist_tags playlist_tags_playlist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
+-- Name: collection_items collection_items_post_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
 --
 
-ALTER TABLE ONLY public.playlist_tags
-    ADD CONSTRAINT playlist_tags_playlist_id_fkey FOREIGN KEY (playlist_id) REFERENCES public.playlists(id) ON DELETE CASCADE;
-
-
---
--- Name: playlist_tags playlist_tags_tag_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
---
-
-ALTER TABLE ONLY public.playlist_tags
-    ADD CONSTRAINT playlist_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.tags(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.collection_items
+    ADD CONSTRAINT collection_items_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id) ON DELETE SET NULL;
 
 
 --
--- Name: playlists playlists_cover_file_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
+-- Name: collection_tags collection_tags_collection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
 --
 
-ALTER TABLE ONLY public.playlists
-    ADD CONSTRAINT playlists_cover_file_id_fkey FOREIGN KEY (cover_file_id) REFERENCES public.files(id);
+ALTER TABLE ONLY public.collection_tags
+    ADD CONSTRAINT collection_tags_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES public.collections(id) ON DELETE CASCADE;
 
 
 --
--- Name: playlists playlists_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
+-- Name: collection_tags collection_tags_tag_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
 --
 
-ALTER TABLE ONLY public.playlists
-    ADD CONSTRAINT playlists_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.collection_tags
+    ADD CONSTRAINT collection_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.tags(id) ON DELETE CASCADE;
+
+
+--
+-- Name: collections collections_cover_file_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
+--
+
+ALTER TABLE ONLY public.collections
+    ADD CONSTRAINT collections_cover_file_id_fkey FOREIGN KEY (cover_file_id) REFERENCES public.files(id);
+
+
+--
+-- Name: collections collections_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: glab
+--
+
+ALTER TABLE ONLY public.collections
+    ADD CONSTRAINT collections_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -578,3 +578,19 @@ ALTER TABLE ONLY public.thumbnails
 --
 
 \unrestrict SNOsey0ZcWhXXfVTayRYBhLen7nHgcOxQK9ekjHg0paeZOfgsiQzaxn9c6ZgHjF
+
+CREATE TABLE public.playback_settings (
+    user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    collection_id uuid REFERENCES public.collections(id) ON DELETE CASCADE,
+    settings jsonb NOT NULL CHECK (jsonb_typeof(settings) = 'object'),
+    CONSTRAINT playback_settings_scope UNIQUE NULLS NOT DISTINCT (user_id, collection_id)
+);
+ALTER TABLE public.playback_settings OWNER TO glab;
+
+CREATE TABLE public.collection_playback_positions (
+    user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    collection_id uuid NOT NULL REFERENCES public.collections(id) ON DELETE CASCADE,
+    item_id uuid REFERENCES public.collection_items(id) ON DELETE SET NULL,
+    PRIMARY KEY (user_id, collection_id)
+);
+ALTER TABLE public.collection_playback_positions OWNER TO glab;

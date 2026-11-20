@@ -1,4 +1,4 @@
 pub mod api_docs;
 pub mod error;
-mod handlers;
+pub(crate) mod handlers;
 pub mod web_server;

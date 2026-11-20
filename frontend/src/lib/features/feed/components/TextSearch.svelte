@@ -145,7 +145,7 @@
             onkeydown={onKeydown}
             onfocus={() => (focused = true)}
             onblur={() => setTimeout(() => (focused = false), 120)}
-            placeholder="tag_name ~tag_name -tag_name"
+            placeholder="tag_name ~tag_name -tag_name id:>UUID"
             class="text-search__input"
         />
         <button type="button" onclick={submit} class="text-search__button">Search</button>

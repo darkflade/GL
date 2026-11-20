@@ -1,5 +1,5 @@
 use crate::storage::postgres::files::PostgresFileRepository;
-use crate::storage::postgres::playlists::PostgresPlaylistRepository;
+use crate::storage::postgres::collections::PostgresCollectionRepository;
 use crate::storage::postgres::posts::PostgresPostRepository;
 use crate::storage::postgres::tags::PostgresTagRepository;
 use crate::storage::postgres::users::PostgresUserRepository;
@@ -48,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
     let post_repo = PostgresPostRepository::new(pool.clone());
     let tag_repo = PostgresTagRepository::new(pool.clone());
     let file_repo = PostgresFileRepository::new(pool.clone());
-    let playlist_repo = PostgresPlaylistRepository::new(pool.clone());
+    let collection_repo = PostgresCollectionRepository::new(pool.clone());
     let user_repo = PostgresUserRepository::new(pool.clone());
     let file_storage = LocalFileStorage::new("/media/new/full");
 
@@ -58,8 +58,10 @@ async fn main() -> anyhow::Result<()> {
         server_port
     );
     web_server::run_web_server(
+        crate::storage::postgres::search::PostgresSearchRepository::new(pool.clone()),
+        crate::storage::postgres::playback::PostgresPlaybackRepository::new(pool.clone()),
         post_repo,
-        playlist_repo,
+        collection_repo,
         tag_repo,
         file_repo,
         user_repo,

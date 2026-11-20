@@ -1,5 +1,5 @@
 use crate::domain::model::{
-    FileID, NoteID, PlaylistItemID, PlaylistSummary, Post, PostID, Tag, TagCategory, TagID,
+    FileID, NoteID, CollectionItemID, CollectionSummary, Post, PostID, Tag, TagCategory, TagID,
     TagRelation,
 };
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ pub enum TagUpdateEvent {
     Create { tags: Vec<NewTag> },
     Edit { tags: Vec<TagEdit> },
     Remove { tag_ids: Vec<TagID> },
+    Merge { source_id: TagID, target_id: TagID },
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -90,59 +91,59 @@ pub struct UpdatePost {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct NewPlaylist {
+pub struct NewCollection {
     pub title: String,
     pub description: Option<String>,
     pub tag_ids: Option<Vec<TagID>>,
     pub cover: Option<FileID>,
-    pub items: Option<Vec<NewPlaylistItem>>,
+    pub items: Option<Vec<NewCollectionItem>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct NewPlaylistItem {
+pub struct NewCollectionItem {
     pub position: u32,
-    pub content: NewPlaylistItemContent,
+    pub content: NewCollectionItemContent,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum NewPlaylistItemContent {
+pub enum NewCollectionItemContent {
     Post { post_id: PostID },
     Note { text: String },
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct UpdatePlaylist {
+pub struct UpdateCollection {
     pub title: Option<String>,
     pub description: Option<String>,
     pub add_tag_ids: Option<Vec<TagID>>,
     pub remove_tag_ids: Option<Vec<TagID>>,
     pub cover: Option<FileID>,
-    pub item_events: Option<Vec<PlaylistItemEvent>>,
+    pub item_events: Option<Vec<CollectionItemEvent>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
-pub enum PlaylistItemEvent {
+pub enum CollectionItemEvent {
     Add {
-        after_id: Option<PlaylistItemID>,
-        content: NewPlaylistItemContent,
+        after_id: Option<CollectionItemID>,
+        content: NewCollectionItemContent,
     },
     Edit {
-        item_id: PlaylistItemID,
-        content: NewPlaylistItemContent,
+        item_id: CollectionItemID,
+        content: NewCollectionItemContent,
     },
     Remove {
-        item_id: PlaylistItemID,
+        item_id: CollectionItemID,
     },
     Move {
-        item_id: PlaylistItemID,
-        after_id: Option<PlaylistItemID>,
+        item_id: CollectionItemID,
+        after_id: Option<CollectionItemID>,
     },
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct PlaylistQuery {
+pub struct CollectionQuery {
     pub tags: TagQuery,
     pub text: String,
 }
@@ -214,8 +215,8 @@ pub struct SearchPostsKeysetResponse {
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
-pub struct SearchPlaylistsResponse {
-    pub playlists: Vec<PlaylistSummary>,
+pub struct SearchCollectionsResponse {
+    pub collections: Vec<CollectionSummary>,
     pub has_next: bool,
     pub has_prev: bool,
     pub next_cursor: Option<KeysetPageCursor>,
@@ -239,3 +240,6 @@ pub struct SearchTagRelationsResponse {
     pub next_cursor: Option<KeysetPageCursor>,
     pub prev_cursor: Option<KeysetPageCursor>,
 }
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TagNeighborhood { pub roots: Vec<Tag>, pub tag: Tag, pub parents: Vec<Tag>, pub children: Vec<Tag>, pub aliases: Vec<Tag> }

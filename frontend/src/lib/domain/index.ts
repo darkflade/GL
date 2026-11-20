@@ -6,4 +6,4 @@ export * from "$lib/domain/value-objects/error";
 export * from "$lib/domain/models/media";
 export * from "$lib/domain/models/tag";
 export * from "$lib/domain/models/post";
-export * from "$lib/domain/models/playlist";
+export * from "$lib/domain/models/collection";

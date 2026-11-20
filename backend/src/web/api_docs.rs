@@ -60,6 +60,8 @@ pub enum TagUpdateEventDoc {
     Create { tags: Vec<NewTagDoc> },
     Edit { tags: Vec<TagEditDoc> },
     Remove { tag_ids: Vec<Uuid> },
+    /// Union assignments and relations into target, then delete source atomically.
+    Merge { source_id: Uuid, target_id: Uuid },
 }
 
 #[derive(Serialize, ToSchema)]
@@ -130,6 +132,10 @@ pub struct TagQueryDoc {
 
 #[derive(Serialize, ToSchema)]
 pub struct SearchQueryDoc {
+    /// Order: relevance (default), uuid_asc, uuid_desc. UUID ordering is applied before pagination.
+    #[schema(example = "uuid_desc")]
+    pub sort: Option<String>,
+    /// Title/description query. Supports id:<UUID, id:>UUID and id:=UUID tokens combined with tags.
     pub text_query: Option<String>,
     pub tag_query: Option<TagQueryDoc>,
     pub cursor: Option<SearchCursorDoc>,
@@ -255,47 +261,47 @@ pub struct CreatePostMetaDoc {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct NewPlaylistDoc {
+pub struct NewCollectionDoc {
     pub title: String,
     pub description: Option<String>,
     pub tag_ids: Option<Vec<Uuid>>,
     pub cover: Option<Uuid>,
-    pub items: Option<Vec<NewPlaylistItemDoc>>,
+    pub items: Option<Vec<NewCollectionItemDoc>>,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct NewPlaylistItemDoc {
+pub struct NewCollectionItemDoc {
     pub position: u32,
-    pub content: NewPlaylistItemContentDoc,
+    pub content: NewCollectionItemContentDoc,
 }
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum NewPlaylistItemContentDoc {
+pub enum NewCollectionItemContentDoc {
     Post { post_id: Uuid },
     Note { text: String },
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct UpdatePlaylistDoc {
+pub struct UpdateCollectionDoc {
     pub title: Option<String>,
     pub description: Option<String>,
     pub add_tag_ids: Option<Vec<Uuid>>,
     pub remove_tag_ids: Option<Vec<Uuid>>,
     pub cover: Option<Uuid>,
-    pub item_events: Option<Vec<PlaylistItemEventDoc>>,
+    pub item_events: Option<Vec<CollectionItemEventDoc>>,
 }
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "op", rename_all = "snake_case")]
-pub enum PlaylistItemEventDoc {
+pub enum CollectionItemEventDoc {
     Add {
         after_id: Option<Uuid>,
-        content: NewPlaylistItemContentDoc,
+        content: NewCollectionItemContentDoc,
     },
     Edit {
         item_id: Uuid,
-        content: NewPlaylistItemContentDoc,
+        content: NewCollectionItemContentDoc,
     },
     Remove {
         item_id: Uuid,
@@ -307,30 +313,30 @@ pub enum PlaylistItemEventDoc {
 }
 
 #[derive(Serialize, ToSchema)]
-pub enum PlaylistContentDoc {
+pub enum CollectionContentDoc {
     Post(PostDoc),
     Note(String),
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PlaylistItemDoc {
+pub struct CollectionItemDoc {
     pub id: Uuid,
     pub position: u32,
-    pub content: PlaylistContentDoc,
+    pub content: CollectionContentDoc,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PlaylistDoc {
+pub struct CollectionDoc {
     pub id: Uuid,
     pub title: String,
     pub description: Option<String>,
     pub tags: Vec<TagDoc>,
     pub cover: Option<Uuid>,
-    pub items: Vec<PlaylistItemDoc>,
+    pub items: Vec<CollectionItemDoc>,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PlaylistSummaryDoc {
+pub struct CollectionSummaryDoc {
     pub id: Uuid,
     pub title: String,
     pub description: String,
@@ -340,8 +346,8 @@ pub struct PlaylistSummaryDoc {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct SearchPlaylistsResponseDoc {
-    pub playlists: Vec<PlaylistSummaryDoc>,
+pub struct SearchCollectionsResponseDoc {
+    pub collections: Vec<CollectionSummaryDoc>,
     pub has_next: bool,
     pub has_prev: bool,
     pub next_cursor: Option<KeysetPageCursorDoc>,
@@ -563,83 +569,83 @@ fn download_thumb_docs() {}
 
 #[utoipa::path(
     post,
-    path = "/api/playlists/search",
+    path = "/api/collections/search",
     request_body = SearchQueryDoc,
     responses(
-        (status = 200, description = "Playlists search result", body = SearchPlaylistsResponseDoc),
+        (status = 200, description = "Collections search result", body = SearchCollectionsResponseDoc),
         (status = 400, description = "Bad request", body = ErrorBodyDoc),
         (status = 401, description = "Unauthorized", body = ErrorBodyDoc),
         (status = 500, description = "Internal server error", body = ErrorBodyDoc)
     ),
-    tag = "playlists"
+    tag = "collections"
 )]
-fn search_playlists_docs() {}
+fn search_collections_docs() {}
 
 #[utoipa::path(
     post,
-    path = "/api/playlists",
-    request_body = NewPlaylistDoc,
+    path = "/api/collections",
+    request_body = NewCollectionDoc,
     responses(
-        (status = 201, description = "Created playlist id", body = Uuid),
+        (status = 201, description = "Created collection id", body = Uuid),
         (status = 400, description = "Bad request", body = ErrorBodyDoc),
         (status = 401, description = "Unauthorized", body = ErrorBodyDoc),
         (status = 500, description = "Internal server error", body = ErrorBodyDoc)
     ),
-    tag = "playlists"
+    tag = "collections"
 )]
-fn create_playlist_docs() {}
+fn create_collection_docs() {}
 
 #[utoipa::path(
     get,
-    path = "/api/playlists/{id}",
+    path = "/api/collections/{id}",
     params(
-        ("id" = Uuid, Path, description = "Playlist id")
+        ("id" = Uuid, Path, description = "Collection id")
     ),
     responses(
-        (status = 200, description = "Playlist details", body = PlaylistDoc),
+        (status = 200, description = "Collection details", body = CollectionDoc),
         (status = 400, description = "Bad request", body = ErrorBodyDoc),
         (status = 401, description = "Unauthorized", body = ErrorBodyDoc),
-        (status = 404, description = "Playlist not found", body = ErrorBodyDoc),
+        (status = 404, description = "Collection not found", body = ErrorBodyDoc),
         (status = 500, description = "Internal server error", body = ErrorBodyDoc)
     ),
-    tag = "playlists"
+    tag = "collections"
 )]
-fn get_playlist_details_docs() {}
+fn get_collection_details_docs() {}
 
 #[utoipa::path(
     delete,
-    path = "/api/playlists/{id}",
+    path = "/api/collections/{id}",
     params(
-        ("id" = Uuid, Path, description = "Playlist id")
+        ("id" = Uuid, Path, description = "Collection id")
     ),
     responses(
-        (status = 204, description = "Playlist deleted"),
+        (status = 204, description = "Collection deleted"),
         (status = 400, description = "Bad request", body = ErrorBodyDoc),
         (status = 401, description = "Unauthorized", body = ErrorBodyDoc),
-        (status = 404, description = "Playlist not found", body = ErrorBodyDoc),
+        (status = 404, description = "Collection not found", body = ErrorBodyDoc),
         (status = 500, description = "Internal server error", body = ErrorBodyDoc)
     ),
-    tag = "playlists"
+    tag = "collections"
 )]
-fn delete_playlist_docs() {}
+fn delete_collection_docs() {}
 
 #[utoipa::path(
     patch,
-    path = "/api/playlists/{id}",
-    request_body = UpdatePlaylistDoc,
+    path = "/api/collections/{id}",
+    request_body = UpdateCollectionDoc,
     params(
-        ("id" = Uuid, Path, description = "Playlist id")
+        ("id" = Uuid, Path, description = "Collection id")
     ),
     responses(
-        (status = 204, description = "Playlist updated"),
+        (status = 204, description = "Collection updated"),
         (status = 400, description = "Bad request", body = ErrorBodyDoc),
         (status = 401, description = "Unauthorized", body = ErrorBodyDoc),
-        (status = 404, description = "Playlist not found", body = ErrorBodyDoc),
+        (status = 404, description = "Collection not found", body = ErrorBodyDoc),
         (status = 500, description = "Internal server error", body = ErrorBodyDoc)
     ),
-    tag = "playlists"
+    tag = "collections"
 )]
-fn update_playlist_docs() {}
+fn update_collection_docs() {}
 
 #[derive(OpenApi)]
 #[openapi(
@@ -718,11 +724,11 @@ pub struct PostsApiDoc;
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        search_playlists_docs,
-        create_playlist_docs,
-        get_playlist_details_docs,
-        delete_playlist_docs,
-        update_playlist_docs,
+        search_collections_docs,
+        create_collection_docs,
+        get_collection_details_docs,
+        delete_collection_docs,
+        update_collection_docs,
         download_file_docs,
         download_thumb_docs
     ),
@@ -743,22 +749,22 @@ pub struct PostsApiDoc;
         FileDoc,
         PostNoteDoc,
         PostDoc,
-        NewPlaylistDoc,
-        NewPlaylistItemDoc,
-        NewPlaylistItemContentDoc,
-        UpdatePlaylistDoc,
-        PlaylistItemEventDoc,
-        PlaylistContentDoc,
-        PlaylistItemDoc,
-        PlaylistDoc,
-        PlaylistSummaryDoc,
-        SearchPlaylistsResponseDoc
+        NewCollectionDoc,
+        NewCollectionItemDoc,
+        NewCollectionItemContentDoc,
+        UpdateCollectionDoc,
+        CollectionItemEventDoc,
+        CollectionContentDoc,
+        CollectionItemDoc,
+        CollectionDoc,
+        CollectionSummaryDoc,
+        SearchCollectionsResponseDoc
     )),
     tags(
-        (name = "playlists", description = "Playlist operations")
+        (name = "collections", description = "Collection operations")
     )
 )]
-pub struct PlaylistsApiDoc;
+pub struct CollectionsApiDoc;
 
 pub fn generate_openapi_yaml() -> Result<String, serde_yaml::Error> {
     generate_service_openapi_yaml("tags").map(|yaml| yaml.expect("tags service must exist"))
@@ -768,7 +774,7 @@ fn generate_service_openapi(service_name: &str) -> Option<utoipa::openapi::OpenA
     match service_name {
         "tags" => Some(TagsApiDoc::openapi()),
         "posts" => Some(PostsApiDoc::openapi()),
-        "playlists" => Some(PlaylistsApiDoc::openapi()),
+        "collections" => Some(CollectionsApiDoc::openapi()),
         _ => None,
     }
 }
@@ -872,8 +878,8 @@ pub async fn get_docs_index_html() -> HttpResponse {
     <li><a href="/api/docs/plain/tags">Tags Swagger HTML</a></li>
     <li><a href="/api/docs/files/posts">Posts OpenAPI YAML</a></li>
     <li><a href="/api/docs/plain/posts">Posts Swagger HTML</a></li>
-    <li><a href="/api/docs/files/playlists">Playlists OpenAPI YAML</a></li>
-    <li><a href="/api/docs/plain/playlists">Playlists Swagger HTML</a></li>
+    <li><a href="/api/docs/files/collections">Collections OpenAPI YAML</a></li>
+    <li><a href="/api/docs/plain/collections">Collections Swagger HTML</a></li>
   </ul>
 </body>
 </html>

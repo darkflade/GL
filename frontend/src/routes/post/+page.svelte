@@ -8,11 +8,11 @@
     import {getPost} from "$lib/application/use-cases/get-post";
     import PostCard from "$lib/features/feed/components/PostCard.svelte";
     import Header from "$lib/shared/components/layout/Header.svelte";
-    import AddToPlaylistDialog from "$lib/features/playlists/components/AddToPlaylistDialog.svelte";
+    import AddToCollectionDialog from "$lib/features/collections/components/AddToCollectionDialog.svelte";
 
     let loading = $state(false)
     let post = $state<Post>()
-    let playlistDialogOpen = $state(false)
+    let collectionDialogOpen = $state(false)
 
     $effect(() => {
         const id = postIDFromURL(page.url.searchParams)
@@ -33,16 +33,18 @@
         }
     }
 
-    function openPlaylistDialog() {
+    function openCollectionDialog() {
         if (!post) return;
-        playlistDialogOpen = true;
+        collectionDialogOpen = true;
     }
 
-    function closePlaylistDialog() {
-        playlistDialogOpen = false;
+    function closeCollectionDialog() {
+        collectionDialogOpen = false;
     }
 </script>
-
+<svelte:head>
+    <title>{postIDFromURL(page.url.searchParams)}</title>
+</svelte:head>
 {#if loading}
 <p>I am loading</p>
 {:else if post}
@@ -54,8 +56,8 @@
         <div class="description">
             Description: {post.description}
         </div>
-        <button class="playlist-btn" type="button" onclick={openPlaylistDialog}>
-            Add To Playlist
+        <button class="collection-btn" type="button" onclick={openCollectionDialog}>
+            Add To Collection
         </button>
     </header>
     <main class="main">
@@ -82,11 +84,11 @@
 {/if}
 
 {#if post}
-    <AddToPlaylistDialog
-        open={playlistDialogOpen}
+    <AddToCollectionDialog
+        open={collectionDialogOpen}
         postIds={[post.id]}
-        onClose={closePlaylistDialog}
-        onDone={closePlaylistDialog}
+        onClose={closeCollectionDialog}
+        onDone={closeCollectionDialog}
     />
 {/if}
 
@@ -109,7 +111,7 @@
         color: #666;
     }
 
-    .playlist-btn {
+    .collection-btn {
         border: 1px solid #d1d5db;
         border-radius: 8px;
         background: #fff;

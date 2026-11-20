@@ -1,0 +1,557 @@
+openapi: 3.1.0
+info:
+  title: GL
+  description: ''
+  license:
+    name: ''
+  version: 0.1.0
+paths:
+  /api/posts:
+    post:
+      tags:
+      - posts
+      operationId: create_post_docs
+      requestBody:
+        description: Multipart body with `meta` JSON string and `file` binary. `meta` must be sent before `file`.
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreatePostMultipartDoc'
+        required: true
+      responses:
+        '201':
+          description: Created post id
+          content:
+            text/plain:
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+  /api/posts/search:
+    post:
+      tags:
+      - posts
+      operationId: search_posts_docs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchQueryDoc'
+        required: true
+      responses:
+        '200':
+          description: Posts search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchPostsResponseDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+  /api/posts/{id}:
+    get:
+      tags:
+      - posts
+      operationId: get_post_docs
+      parameters:
+      - name: id
+        in: path
+        description: Post id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Post details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+    delete:
+      tags:
+      - posts
+      operationId: delete_post_docs
+      parameters:
+      - name: id
+        in: path
+        description: Post id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Post deleted
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+    patch:
+      tags:
+      - posts
+      operationId: update_post_docs
+      parameters:
+      - name: id
+        in: path
+        description: Post id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePostDoc'
+        required: true
+      responses:
+        '204':
+          description: Post updated
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+components:
+  schemas:
+    CreatePostMetaDoc:
+      type: object
+      required:
+      - title
+      - tags
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+        title:
+          type: string
+    CreatePostMultipartDoc:
+      type: object
+      required:
+      - meta
+      - file
+      properties:
+        file:
+          type: string
+          format: binary
+        meta:
+          type: string
+          example: '{"title":"My post","tags":["landscape","night"]}'
+    ErrorBodyDoc:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    FileDoc:
+      type: object
+      required:
+      - id
+      - path
+      - media_type
+      properties:
+        created_at:
+          type:
+          - string
+          - 'null'
+        hash:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+          format: uuid
+        media_type:
+          $ref: '#/components/schemas/FileTypeDoc'
+        meta:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/FileMetaDoc'
+        path:
+          type: string
+        thumbnail:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ThumbnailDoc'
+    FileMetaDoc:
+      type: object
+      properties:
+        duration_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        extension:
+          type:
+          - string
+          - 'null'
+        height:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        width:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+    FileTypeDoc:
+      type: string
+      enum:
+      - Picture
+      - Video
+      - Audio
+    KeysetDirectionDoc:
+      type: string
+      enum:
+      - next
+      - prev
+    KeysetPageCursorDoc:
+      type: object
+      required:
+      - mode
+      - direction
+      - last_id
+      - last_score
+      - limit
+      properties:
+        direction:
+          $ref: '#/components/schemas/KeysetDirectionDoc'
+        last_id:
+          type: string
+          format: uuid
+        last_score:
+          type: number
+          format: double
+        limit:
+          type: integer
+          format: int64
+        mode:
+          $ref: '#/components/schemas/PaginationModeDoc'
+    PaginationModeDoc:
+      type: string
+      enum:
+      - offset
+      - keyset
+    PostDoc:
+      type: object
+      required:
+      - id
+      - title
+      - file
+      - tags
+      - notes
+      properties:
+        description:
+          type:
+          - string
+          - 'null'
+        file:
+          $ref: '#/components/schemas/FileDoc'
+        id:
+          type: string
+          format: uuid
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostNoteDoc'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagDoc'
+        title:
+          type: string
+    PostNoteDoc:
+      type: object
+      required:
+      - id
+      - text
+      - x
+      - y
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        x:
+          type: number
+          format: float
+        y:
+          type: number
+          format: float
+    SearchCursorDoc:
+      type: object
+      properties:
+        direction:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetDirectionDoc'
+        last_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        last_score:
+          type:
+          - number
+          - 'null'
+          format: double
+        limit:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        mode:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/PaginationModeDoc'
+        page:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    SearchPostsResponseDoc:
+      type: object
+      required:
+      - posts
+      properties:
+        has_next:
+          type:
+          - boolean
+          - 'null'
+        has_prev:
+          type:
+          - boolean
+          - 'null'
+        next_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostDoc'
+        prev_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+        total_pages:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    SearchQueryDoc:
+      type: object
+      properties:
+        cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/SearchCursorDoc'
+        tag_query:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TagQueryDoc'
+        text_query:
+          type:
+          - string
+          - 'null'
+    TagCategoryDoc:
+      type: string
+      enum:
+      - Artist
+      - Copyright
+      - Character
+      - General
+    TagDoc:
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - count
+      properties:
+        category:
+          $ref: '#/components/schemas/TagCategoryDoc'
+        count:
+          type: integer
+          format: int32
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    TagQueryDoc:
+      type: object
+      required:
+      - must
+      - should
+      - must_not
+      properties:
+        must:
+          type: array
+          items:
+            type: string
+        must_not:
+          type: array
+          items:
+            type: string
+        should:
+          type: array
+          items:
+            type: string
+    ThumbSizeTypeDoc:
+      type: string
+      enum:
+      - Small
+      - Medium
+      - Large
+    ThumbnailDoc:
+      type: object
+      required:
+      - height
+      - weight
+      - path
+      - size_type
+      properties:
+        created_at:
+          type:
+          - string
+          - 'null'
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+        path:
+          type: string
+        size_type:
+          $ref: '#/components/schemas/ThumbSizeTypeDoc'
+        weight:
+          type: integer
+          format: int32
+          minimum: 0
+    UpdatePostDoc:
+      type: object
+      properties:
+        add_tag_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        description:
+          type:
+          - string
+          - 'null'
+        notes:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/UpdatePostNoteDoc'
+        remove_tag_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        title:
+          type:
+          - string
+          - 'null'
+    UpdatePostNoteDoc:
+      type: object
+      required:
+      - text
+      - x
+      - y
+      properties:
+        id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        text:
+          type: string
+        x:
+          type: number
+          format: float
+        y:
+          type: number
+          format: float
+tags:
+- name: posts
+  description: Post operations

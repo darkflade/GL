@@ -1,0 +1,756 @@
+openapi: 3.1.0
+info:
+  title: GL
+  description: ''
+  license:
+    name: ''
+  version: 0.1.0
+paths:
+  /api/collections:
+    post:
+      tags:
+      - collections
+      operationId: create_collection_docs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewCollectionDoc'
+        required: true
+      responses:
+        '201':
+          description: Created collection id
+          content:
+            text/plain:
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+  /api/collections/search:
+    post:
+      tags:
+      - collections
+      operationId: search_collections_docs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchQueryDoc'
+        required: true
+      responses:
+        '200':
+          description: Collections search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchCollectionsResponseDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+  /api/collections/{id}:
+    get:
+      tags:
+      - collections
+      operationId: get_collection_details_docs
+      parameters:
+      - name: id
+        in: path
+        description: Collection id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Collection details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionDoc'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+    delete:
+      tags:
+      - collections
+      operationId: delete_collection_docs
+      parameters:
+      - name: id
+        in: path
+        description: Collection id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Collection deleted
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+    patch:
+      tags:
+      - collections
+      operationId: update_collection_docs
+      parameters:
+      - name: id
+        in: path
+        description: Collection id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCollectionDoc'
+        required: true
+      responses:
+        '204':
+          description: Collection updated
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDoc'
+components:
+  schemas:
+    ErrorBodyDoc:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    FileDoc:
+      type: object
+      required:
+      - id
+      - path
+      - media_type
+      properties:
+        created_at:
+          type:
+          - string
+          - 'null'
+        hash:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+          format: uuid
+        media_type:
+          $ref: '#/components/schemas/FileTypeDoc'
+        meta:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/FileMetaDoc'
+        path:
+          type: string
+        thumbnail:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ThumbnailDoc'
+    FileMetaDoc:
+      type: object
+      properties:
+        duration_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        extension:
+          type:
+          - string
+          - 'null'
+        height:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        width:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+    FileTypeDoc:
+      type: string
+      enum:
+      - Picture
+      - Video
+      - Audio
+    KeysetDirectionDoc:
+      type: string
+      enum:
+      - next
+      - prev
+    KeysetPageCursorDoc:
+      type: object
+      required:
+      - mode
+      - direction
+      - last_id
+      - last_score
+      - limit
+      properties:
+        direction:
+          $ref: '#/components/schemas/KeysetDirectionDoc'
+        last_id:
+          type: string
+          format: uuid
+        last_score:
+          type: number
+          format: double
+        limit:
+          type: integer
+          format: int64
+        mode:
+          $ref: '#/components/schemas/PaginationModeDoc'
+    NewCollectionDoc:
+      type: object
+      required:
+      - title
+      properties:
+        cover:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        description:
+          type:
+          - string
+          - 'null'
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/NewCollectionItemDoc'
+        tag_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        title:
+          type: string
+    NewCollectionItemContentDoc:
+      oneOf:
+      - type: object
+        required:
+        - post_id
+        - type
+        properties:
+          post_id:
+            type: string
+            format: uuid
+          type:
+            type: string
+            enum:
+            - post
+      - type: object
+        required:
+        - text
+        - type
+        properties:
+          text:
+            type: string
+          type:
+            type: string
+            enum:
+            - note
+    NewCollectionItemDoc:
+      type: object
+      required:
+      - position
+      - content
+      properties:
+        content:
+          $ref: '#/components/schemas/NewCollectionItemContentDoc'
+        position:
+          type: integer
+          format: int32
+          minimum: 0
+    PaginationModeDoc:
+      type: string
+      enum:
+      - offset
+      - keyset
+    CollectionContentDoc:
+      oneOf:
+      - type: object
+        required:
+        - Post
+        properties:
+          Post:
+            $ref: '#/components/schemas/PostDoc'
+      - type: object
+        required:
+        - Note
+        properties:
+          Note:
+            type: string
+    CollectionDoc:
+      type: object
+      required:
+      - id
+      - title
+      - tags
+      - items
+      properties:
+        cover:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        description:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionItemDoc'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagDoc'
+        title:
+          type: string
+    CollectionItemDoc:
+      type: object
+      required:
+      - id
+      - position
+      - content
+      properties:
+        content:
+          $ref: '#/components/schemas/CollectionContentDoc'
+        id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          format: int32
+          minimum: 0
+    CollectionItemEventDoc:
+      oneOf:
+      - type: object
+        required:
+        - content
+        - op
+        properties:
+          after_id:
+            type:
+            - string
+            - 'null'
+            format: uuid
+          content:
+            $ref: '#/components/schemas/NewCollectionItemContentDoc'
+          op:
+            type: string
+            enum:
+            - add
+      - type: object
+        required:
+        - item_id
+        - content
+        - op
+        properties:
+          content:
+            $ref: '#/components/schemas/NewCollectionItemContentDoc'
+          item_id:
+            type: string
+            format: uuid
+          op:
+            type: string
+            enum:
+            - edit
+      - type: object
+        required:
+        - item_id
+        - op
+        properties:
+          item_id:
+            type: string
+            format: uuid
+          op:
+            type: string
+            enum:
+            - remove
+      - type: object
+        required:
+        - item_id
+        - op
+        properties:
+          after_id:
+            type:
+            - string
+            - 'null'
+            format: uuid
+          item_id:
+            type: string
+            format: uuid
+          op:
+            type: string
+            enum:
+            - move
+    CollectionSummaryDoc:
+      type: object
+      required:
+      - id
+      - title
+      - description
+      - item_count
+      - tags
+      properties:
+        cover:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        description:
+          type: string
+        id:
+          type: string
+          format: uuid
+        item_count:
+          type: integer
+          format: int64
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagDoc'
+        title:
+          type: string
+    PostDoc:
+      type: object
+      required:
+      - id
+      - title
+      - file
+      - tags
+      - notes
+      properties:
+        description:
+          type:
+          - string
+          - 'null'
+        file:
+          $ref: '#/components/schemas/FileDoc'
+        id:
+          type: string
+          format: uuid
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostNoteDoc'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagDoc'
+        title:
+          type: string
+    PostNoteDoc:
+      type: object
+      required:
+      - id
+      - text
+      - x
+      - y
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        x:
+          type: number
+          format: float
+        y:
+          type: number
+          format: float
+    SearchCursorDoc:
+      type: object
+      properties:
+        direction:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetDirectionDoc'
+        last_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        last_score:
+          type:
+          - number
+          - 'null'
+          format: double
+        limit:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        mode:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/PaginationModeDoc'
+        page:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    SearchCollectionsResponseDoc:
+      type: object
+      required:
+      - collections
+      - has_next
+      - has_prev
+      properties:
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+        next_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionSummaryDoc'
+        prev_cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/KeysetPageCursorDoc'
+    SearchQueryDoc:
+      type: object
+      properties:
+        cursor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/SearchCursorDoc'
+        tag_query:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TagQueryDoc'
+        text_query:
+          type:
+          - string
+          - 'null'
+    TagCategoryDoc:
+      type: string
+      enum:
+      - Artist
+      - Copyright
+      - Character
+      - General
+    TagDoc:
+      type: object
+      required:
+      - id
+      - name
+      - category
+      - count
+      properties:
+        category:
+          $ref: '#/components/schemas/TagCategoryDoc'
+        count:
+          type: integer
+          format: int32
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    TagQueryDoc:
+      type: object
+      required:
+      - must
+      - should
+      - must_not
+      properties:
+        must:
+          type: array
+          items:
+            type: string
+        must_not:
+          type: array
+          items:
+            type: string
+        should:
+          type: array
+          items:
+            type: string
+    ThumbSizeTypeDoc:
+      type: string
+      enum:
+      - Small
+      - Medium
+      - Large
+    ThumbnailDoc:
+      type: object
+      required:
+      - height
+      - weight
+      - path
+      - size_type
+      properties:
+        created_at:
+          type:
+          - string
+          - 'null'
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+        path:
+          type: string
+        size_type:
+          $ref: '#/components/schemas/ThumbSizeTypeDoc'
+        weight:
+          type: integer
+          format: int32
+          minimum: 0
+    UpdateCollectionDoc:
+      type: object
+      properties:
+        add_tag_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        cover:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        description:
+          type:
+          - string
+          - 'null'
+        item_events:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/CollectionItemEventDoc'
+        remove_tag_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uuid
+        title:
+          type:
+          - string
+          - 'null'
+tags:
+- name: collections
+  description: Collection operations

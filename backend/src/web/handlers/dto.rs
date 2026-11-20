@@ -16,6 +16,7 @@ pub struct SearchParams {
 //Common interface for search query
 #[derive(Deserialize)]
 pub struct SearchQueryParams {
+    pub sort: Option<crate::storage::postgres::search::Sort>,
     pub text_query: Option<String>,
     pub tag_query: Option<TagQueryParams>,
     pub cursor: Option<SearchCursorParams>,

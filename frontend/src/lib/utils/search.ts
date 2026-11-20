@@ -18,6 +18,7 @@ export function serializeQuery(query: SearchPostsQuery): string {
         params.set("q", query.text_query);
     }
 
+    if (query.sort) params.set("sort", query.sort);
     params.set("mode", query.cursor.mode);
     if (query.cursor.mode === "offset") {
         if (query.cursor.page > 0) {
@@ -62,6 +63,7 @@ export function deserializeQuery(params: URLSearchParams): SearchPostsQuery {
     const direction = directionParam === "next" || directionParam === "prev" ? directionParam : undefined;
 
     return {
+        sort: ["uuid_asc", "uuid_desc", "relevance"].includes(params.get("sort") ?? "") ? params.get("sort") as SearchPostsQuery["sort"] : undefined,
         tag_query: {
             must: readValues("must"),
             should: readValues("should"),
@@ -102,6 +104,7 @@ export function parseSearch(tagString: string): SearchPostsQuery {
     }
 
     for (const token of tokens) {
+        if (token.startsWith("id:")) { searchPostsQuery.text_query += `${searchPostsQuery.text_query ? " " : ""}${token}`; continue; }
         if (token === "~" || token === "-") {
             continue
         }
@@ -129,7 +132,7 @@ export function toSearchInput(query: SearchPostsQuery): string {
     const should = query.tag_query.should.map((value) => `~${value.replaceAll(" ", "_")}`)
     const mustNot = query.tag_query.must_not.map((value) => `-${value.replaceAll(" ", "_")}`)
 
-    return [...must, ...should, ...mustNot].join(" ").trim()
+    return [...must, ...should, ...mustNot, query.text_query].filter(Boolean).join(" ").trim()
 }
 
 export function escapeTagForSearch(tag: string): string {

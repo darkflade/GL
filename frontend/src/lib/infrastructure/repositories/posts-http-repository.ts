@@ -24,6 +24,7 @@ export const postsHttpRepository: PostsRepository = {
                   };
 
         return api.post<SearchPostsResponse>("/posts/search", {
+            sort: query.sort,
             tag_query: {
                 must: query.tag_query.must,
                 should: query.tag_query.should,

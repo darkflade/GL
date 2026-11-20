@@ -17,33 +17,33 @@ export interface CreatePostInput {
     file: File;
 }
 
-export type NewPlaylistItemContent =
+export type NewCollectionItemContent =
     | { type: "post"; post_id: UUID }
     | { type: "note"; text: string };
 
-export interface NewPlaylistItem {
+export interface NewCollectionItem {
     position: number;
-    content: NewPlaylistItemContent;
+    content: NewCollectionItemContent;
 }
 
-export interface NewPlaylist {
+export interface NewCollection {
     title: string;
     description?: string | null;
     tag_ids?: UUID[] | null;
     cover?: UUID | null;
-    items?: NewPlaylistItem[] | null;
+    items?: NewCollectionItem[] | null;
 }
 
-export type PlaylistItemEvent =
+export type CollectionItemEvent =
     | {
           op: "add";
           after_id?: UUID | null;
-          content: NewPlaylistItemContent;
+          content: NewCollectionItemContent;
       }
     | {
           op: "edit";
           item_id: UUID;
-          content: NewPlaylistItemContent;
+          content: NewCollectionItemContent;
       }
     | {
           op: "remove";
@@ -55,11 +55,11 @@ export type PlaylistItemEvent =
           after_id?: UUID | null;
       };
 
-export interface UpdatePlaylist {
+export interface UpdateCollection {
     title?: string;
     description?: string | null;
     add_tag_ids?: UUID[] | null;
     remove_tag_ids?: UUID[] | null;
     cover?: UUID | null;
-    item_events?: PlaylistItemEvent[] | null;
+    item_events?: CollectionItemEvent[] | null;
 }

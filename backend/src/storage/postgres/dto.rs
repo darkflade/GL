@@ -1,5 +1,5 @@
 use crate::domain::model::{
-    File, FileID, FileMeta, NoteID, PlaylistContent, PlaylistID, PlaylistItem, PlaylistItemID,
+    File, FileID, FileMeta, NoteID, CollectionContent, CollectionID, CollectionItem, CollectionItemID,
     PostNote, Tag, TagCategory, TagID,
 };
 use serde::{Deserialize, Serialize};
@@ -135,14 +135,14 @@ impl From<TagCategoryResponse> for TagCategory {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PlaylistItemResponse {
-    pub id: PlaylistItemID,
-    pub playlist_id: PlaylistID,
+pub struct CollectionItemResponse {
+    pub id: CollectionItemID,
+    pub collection_id: CollectionID,
     pub position: u32,
-    pub content: PlaylistContent,
+    pub content: CollectionContent,
 }
-impl From<PlaylistItemResponse> for PlaylistItem {
-    fn from(p: PlaylistItemResponse) -> Self {
+impl From<CollectionItemResponse> for CollectionItem {
+    fn from(p: CollectionItemResponse) -> Self {
         Self {
             id: p.id,
             position: p.position,

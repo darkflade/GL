@@ -19,7 +19,7 @@ function toQueryString(cursor?: KeysetCursor): string {
 
 export const tagsHttpRepository: TagsRepository = {
     searchTags: (query: string) => {
-        return api.get<Tag[]>(`/tags/search?query=${query}`);
+        return api.get<Tag[]>(`/tags/search?query=${encodeURIComponent(query)}`);
     },
     listTags: (cursor?: KeysetCursor) => {
         return api.get<SearchTagsResponse>(`/tags${toQueryString(cursor)}`);

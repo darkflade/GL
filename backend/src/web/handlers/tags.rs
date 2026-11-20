@@ -1,7 +1,7 @@
 use crate::application::contracts::KeysetCursor;
 use crate::application::contracts::{TagBatchUpdate, TagRelationsBatchUpdate};
 use crate::application::ports::{
-    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+    FileRepository, CollectionRepository, PostRepository, TagRepository,
 };
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
@@ -16,13 +16,13 @@ pub async fn search_tags<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
     let query = &params.query;
-    let limit = 10;
+    let limit = 50;
 
     if query.is_empty() {
         return Err(AppError::bad_request("No query given"));
@@ -43,7 +43,7 @@ pub async fn list_tags_keyset<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -65,7 +65,7 @@ pub async fn get_related_tags<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -87,7 +87,7 @@ pub async fn update_tags<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -112,7 +112,7 @@ pub async fn update_tag_relations<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -137,7 +137,7 @@ pub async fn list_tag_relations_keyset<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -151,4 +151,11 @@ where
         .map_err(|err| map_repo_error(err, "Tag relations not found", "tags.relations.list"))?;
 
     Ok(HttpResponse::Ok().json(relations))
+}
+
+pub async fn tag_neighborhood<PR, PLR, TR, FR, FS>(services: web::Data<Services<PR, PLR, TR, FR, FS>>, path:web::Path<String>) -> Result<HttpResponse,AppError>
+where PR: PostRepository+Clone, PLR: CollectionRepository+Clone, TR: TagRepository+Clone, FR: FileRepository+Clone, FS:FileStorage+Clone {
+    let id=parse_uuid(&path.into_inner(),"tag id")?;
+    let result=services.get_related_tags.repo.neighborhood(id).await.map_err(|e|map_repo_error(e,"Tag not found","tags.neighborhood"))?;
+    Ok(HttpResponse::Ok().json(result))
 }

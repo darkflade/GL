@@ -1,4 +1,5 @@
 export interface SearchPostsQuery {
+    sort?: "relevance" | "uuid_asc" | "uuid_desc";
     tag_query: TagQuery;
     text_query: string;
     cursor: Cursor;

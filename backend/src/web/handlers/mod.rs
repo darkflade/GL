@@ -1,7 +1,8 @@
-mod dto;
+pub(crate) mod dto;
 pub mod files;
-pub mod playlists;
+pub mod collections;
 pub mod posts;
 pub mod tags;
 pub mod users;
 mod utils;
+pub mod playback;

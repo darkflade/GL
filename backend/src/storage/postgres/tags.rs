@@ -230,6 +230,41 @@ impl PostgresTagRepository {
         }
     }
 
+    async fn merge_tags(
+        tx: &mut Transaction<'_, Postgres>,
+        source: Uuid,
+        target: Uuid,
+    ) -> Result<(), RepoError> {
+        if source == target {
+            return Err(RepoError::Conflict);
+        }
+        let mut ids = vec![source, target];
+        ids.sort();
+        for id in ids {
+            Self::ensure_tag_exists(tx, id).await?;
+        }
+        sqlx::query("INSERT INTO post_tags(post_id,tag_id) SELECT post_id,$2 FROM post_tags WHERE tag_id=$1 ON CONFLICT DO NOTHING")
+            .bind(source).bind(target).execute(&mut **tx).await.map_err(|e|Self::map_db_error(e,"tags.merge posts"))?;
+        sqlx::query("INSERT INTO collection_tags(collection_id,tag_id) SELECT collection_id,$2 FROM collection_tags WHERE tag_id=$1 ON CONFLICT DO NOTHING")
+            .bind(source).bind(target).execute(&mut **tx).await.map_err(|e|Self::map_db_error(e,"tags.merge collections"))?;
+        sqlx::query("INSERT INTO tag_relation_edges(parent_id,child_id) SELECT DISTINCT CASE WHEN parent_id=$1 THEN $2 ELSE parent_id END, CASE WHEN child_id=$1 THEN $2 ELSE child_id END FROM tag_relation_edges WHERE (parent_id=$1 OR child_id=$1) AND (CASE WHEN parent_id=$1 THEN $2 ELSE parent_id END) <> (CASE WHEN child_id=$1 THEN $2 ELSE child_id END) ON CONFLICT DO NOTHING")
+            .bind(source).bind(target).execute(&mut **tx).await.map_err(|e|Self::map_db_error(e,"tags.merge edges"))?;
+        sqlx::query("INSERT INTO tag_aliases(tag_id,alias_id) SELECT DISTINCT LEAST($2,CASE WHEN tag_id=$1 THEN alias_id ELSE tag_id END), GREATEST($2,CASE WHEN tag_id=$1 THEN alias_id ELSE tag_id END) FROM tag_aliases WHERE (tag_id=$1 OR alias_id=$1) AND (CASE WHEN tag_id=$1 THEN alias_id ELSE tag_id END) <> $2 ON CONFLICT DO NOTHING")
+            .bind(source).bind(target).execute(&mut **tx).await.map_err(|e|Self::map_db_error(e,"tags.merge aliases"))?;
+        sqlx::query("DELETE FROM tags WHERE id=$1")
+            .bind(source)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| Self::map_db_error(e, "tags.merge delete"))?;
+        let cycle: bool = sqlx::query_scalar("WITH RECURSIVE reachable(parent_id,child_id) AS (SELECT parent_id,child_id FROM tag_relation_edges UNION SELECT r.parent_id,e.child_id FROM reachable r JOIN tag_relation_edges e ON e.parent_id=r.child_id) SELECT EXISTS(SELECT 1 FROM reachable WHERE parent_id=child_id)")
+            .fetch_one(&mut **tx).await.map_err(|e|Self::map_db_error(e,"tags.merge cycle"))?;
+        if cycle {
+            return Err(RepoError::Conflict);
+        }
+        sqlx::query("UPDATE tags SET post_count=(SELECT count(*)::int FROM post_tags WHERE tag_id=$1) WHERE id=$1").bind(target).execute(&mut **tx).await.map_err(|e|Self::map_db_error(e,"tags.merge count"))?;
+        Ok(())
+    }
+
     async fn rebuild_closure(tx: &mut Transaction<'_, Postgres>) -> Result<(), RepoError> {
         sqlx::query!("DELETE FROM tag_relation_closure")
             .execute(tx.as_mut())
@@ -306,6 +341,41 @@ struct TagRelationKeysetRow {
 
 #[async_trait]
 impl TagRepository for PostgresTagRepository {
+    async fn neighborhood(
+        &self,
+        id: TagID,
+    ) -> Result<crate::application::contracts::TagNeighborhood, RepoError> {
+        let rows: Vec<(Uuid,i16,String,i32,i16)> = sqlx::query_as("SELECT t.id,t.category,t.name,t.post_count,0::smallint FROM tags t WHERE t.id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,1::smallint FROM tags t JOIN tag_relation_edges e ON e.parent_id=t.id WHERE e.child_id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,2::smallint FROM tags t JOIN tag_relation_edges e ON e.child_id=t.id WHERE e.parent_id=$1 UNION ALL SELECT t.id,t.category,t.name,t.post_count,3::smallint FROM tags t JOIN tag_aliases a ON (a.tag_id=$1 AND a.alias_id=t.id) OR (a.alias_id=$1 AND a.tag_id=t.id) UNION ALL SELECT t.id,t.category,t.name,t.post_count,4::smallint FROM tags t JOIN tag_relation_closure c ON c.ancestor_id=t.id WHERE c.descendant_id=$1 AND NOT EXISTS(SELECT 1 FROM tag_relation_edges e WHERE e.child_id=t.id) ORDER BY name")
+            .bind(id).fetch_all(&self.pool).await.map_err(|e|Self::map_db_error(e,"tags.neighborhood"))?;
+        let mut tag = None;
+        let mut parents = vec![];
+        let mut children = vec![];
+        let mut aliases = vec![];
+        let mut roots = vec![];
+        for (id, category, name, count, kind) in rows {
+            let item = Tag {
+                id,
+                category: category.into(),
+                name,
+                count,
+            };
+            match kind {
+                0 => tag = Some(item),
+                1 => parents.push(item),
+                2 => children.push(item),
+                3 => aliases.push(item),
+                _ => roots.push(item),
+            }
+        }
+        Ok(crate::application::contracts::TagNeighborhood {
+            roots,
+            tag: tag.ok_or(RepoError::NotFound)?,
+            parents,
+            children,
+            aliases,
+        })
+    }
+
     async fn get_or_create(&self, tags: Vec<NewTag>) -> Result<Vec<Tag>, RepoError> {
         let mut tx = self
             .pool
@@ -313,6 +383,10 @@ impl TagRepository for PostgresTagRepository {
             .await
             .map_err(|err| Self::map_db_error(err, "tags.get_or_create failed to begin tx"))?;
 
+        sqlx::query("SELECT pg_advisory_xact_lock(749214601)")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| Self::map_db_error(e, "tags.get_or_create lock"))?;
         let mut result = Vec::with_capacity(tags.len());
         for new_tag in tags {
             result.push(Self::insert_or_get_tag(&mut tx, new_tag).await?);
@@ -326,13 +400,13 @@ impl TagRepository for PostgresTagRepository {
     }
 
     async fn search(&self, query: &str, limit: i64) -> Result<Vec<Tag>, RepoError> {
-        let pattern = format!("{}%", query.to_lowercase());
+        let pattern = format!("%{}%", query.to_lowercase());
 
         let rows = sqlx::query!(
             "
             SELECT id, category, name, post_count AS \"count!\"
             FROM tags
-            WHERE name LIKE $1
+            WHERE name ILIKE $1 OR id::text ILIKE $1
             ORDER BY post_count DESC, name ASC
             LIMIT $2
             ",
@@ -606,6 +680,10 @@ impl TagRepository for PostgresTagRepository {
             .await
             .map_err(|err| Self::map_db_error(err, "tags.update failed to begin tx"))?;
 
+        sqlx::query("SELECT pg_advisory_xact_lock(749214601)")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| Self::map_db_error(e, "tags.update lock"))?;
         let mut should_rebuild_closure = false;
 
         for event in update.events {
@@ -634,6 +712,13 @@ impl TagRepository for PostgresTagRepository {
                             return Err(RepoError::NotFound);
                         }
                     }
+                }
+                TagUpdateEvent::Merge {
+                    source_id,
+                    target_id,
+                } => {
+                    Self::merge_tags(&mut tx, source_id, target_id).await?;
+                    should_rebuild_closure = true;
                 }
                 TagUpdateEvent::Remove { tag_ids } => {
                     if tag_ids.is_empty() {
@@ -673,6 +758,10 @@ impl TagRepository for PostgresTagRepository {
                 Self::map_db_error(err, "tags.update_relations failed to begin tx")
             })?;
 
+        sqlx::query("SELECT pg_advisory_xact_lock(749214601)")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| Self::map_db_error(e, "tags.relations lock"))?;
         let mut should_rebuild_closure = false;
 
         for event in update.events {
@@ -820,5 +909,99 @@ impl TagRepository for PostgresTagRepository {
             .map_err(|err| Self::map_db_error(err, "tags.update_relations failed to commit"))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+    use sqlx::postgres::PgPoolOptions;
+
+    async fn fixture(tx: &mut Transaction<'_, Postgres>) {
+        // Only temporary tables are visible; production data cannot be queried or changed.
+        sqlx::raw_sql("SET LOCAL search_path=pg_temp;
+            CREATE TEMP TABLE tags(id uuid PRIMARY KEY, category smallint DEFAULT 3, name text, post_count integer DEFAULT 0) ON COMMIT DROP;
+            CREATE TEMP TABLE post_tags(post_id uuid,tag_id uuid REFERENCES tags(id) ON DELETE CASCADE,PRIMARY KEY(post_id,tag_id)) ON COMMIT DROP;
+            CREATE TEMP TABLE collection_tags(collection_id uuid,tag_id uuid REFERENCES tags(id) ON DELETE CASCADE,PRIMARY KEY(collection_id,tag_id)) ON COMMIT DROP;
+            CREATE TEMP TABLE tag_relation_edges(parent_id uuid REFERENCES tags(id) ON DELETE CASCADE,child_id uuid REFERENCES tags(id) ON DELETE CASCADE,PRIMARY KEY(parent_id,child_id),CHECK(parent_id<>child_id)) ON COMMIT DROP;
+            CREATE TEMP TABLE tag_aliases(tag_id uuid REFERENCES tags(id) ON DELETE CASCADE,alias_id uuid REFERENCES tags(id) ON DELETE CASCADE,PRIMARY KEY(tag_id,alias_id),CHECK(tag_id<alias_id)) ON COMMIT DROP;
+            CREATE TEMP TABLE tag_relation_closure(ancestor_id uuid REFERENCES tags(id) ON DELETE CASCADE,descendant_id uuid REFERENCES tags(id) ON DELETE CASCADE,depth int,PRIMARY KEY(ancestor_id,descendant_id)) ON COMMIT DROP;
+            INSERT INTO tags(id,name) SELECT ('00000000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,'tag'||n FROM generate_series(1,5) n;
+            INSERT INTO post_tags VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001'),('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002'),('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001'),('10000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000002');
+            INSERT INTO collection_tags SELECT post_id,tag_id FROM post_tags;
+            INSERT INTO tag_relation_edges VALUES ('00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004'),('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000004');
+            INSERT INTO tag_aliases VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005'),('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');")
+            .execute(&mut **tx).await.unwrap();
+    }
+    async fn pool() -> PgPool {
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&std::env::var("TAG_TEST_DATABASE_URL").expect("Set TAG_TEST_DATABASE_URL"))
+            .await
+            .unwrap()
+    }
+    #[tokio::test]
+    #[ignore = "Requires TAG_TEST_DATABASE_URL; uses isolated temporary tables and rollback"]
+    async fn merge_unions_assignments_preserves_edges_and_aliases() {
+        let pool = pool().await;
+        let mut tx = pool.begin().await.unwrap();
+        fixture(&mut tx).await;
+        assert!(matches!(
+            PostgresTagRepository::merge_tags(&mut tx, Uuid::from_u128(1), Uuid::from_u128(1))
+                .await,
+            Err(RepoError::Conflict)
+        ));
+        PostgresTagRepository::merge_tags(&mut tx, Uuid::from_u128(1), Uuid::from_u128(2))
+            .await
+            .unwrap();
+        PostgresTagRepository::rebuild_closure(&mut tx)
+            .await
+            .unwrap();
+        let counts:(i64,i64,i64,i64,i32)=sqlx::query_as("SELECT (SELECT count(*) FROM post_tags),(SELECT count(*) FROM collection_tags),(SELECT count(*) FROM tag_relation_edges),(SELECT count(*) FROM tag_aliases),(SELECT post_count FROM tags WHERE id='00000000-0000-0000-0000-000000000002')").fetch_one(&mut *tx).await.unwrap();
+        assert_eq!(counts, (3, 3, 2, 1, 3));
+        let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tag_relation_closure WHERE ancestor_id='00000000-0000-0000-0000-000000000003' AND descendant_id='00000000-0000-0000-0000-000000000004' AND depth=2)").fetch_one(&mut *tx).await.unwrap();
+        assert!(exists);
+        let source: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM tags WHERE id='00000000-0000-0000-0000-000000000001')",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        assert!(!source);
+        tx.rollback().await.unwrap();
+    }
+    #[tokio::test]
+    #[ignore = "Requires TAG_TEST_DATABASE_URL; uses isolated temporary tables and rollback"]
+    async fn merge_cycle_can_be_rolled_back_without_losing_source() {
+        let pool = pool().await;
+        let mut tx = pool.begin().await.unwrap();
+        fixture(&mut tx).await;
+        sqlx::query(
+            "DELETE FROM tag_relation_edges WHERE parent_id='00000000-0000-0000-0000-000000000002'",
+        )
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO tag_relation_edges VALUES ('00000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000002')").execute(&mut *tx).await.unwrap();
+        sqlx::query("SAVEPOINT before_merge")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        assert!(matches!(
+            PostgresTagRepository::merge_tags(&mut tx, Uuid::from_u128(1), Uuid::from_u128(2))
+                .await,
+            Err(RepoError::Conflict)
+        ));
+        sqlx::query("ROLLBACK TO SAVEPOINT before_merge")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let counts: (i64, i64) =
+            sqlx::query_as("SELECT (SELECT count(*) FROM tags),(SELECT count(*) FROM post_tags)")
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap();
+        assert_eq!(counts, (5, 4));
+        tx.rollback().await.unwrap();
     }
 }

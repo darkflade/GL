@@ -1,5 +1,5 @@
 use crate::application::ports::{
-    FileRepository, PlaylistRepository, PostRepository, TagRepository, UserRepository,
+    FileRepository, CollectionRepository, PostRepository, TagRepository, UserRepository,
 };
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
@@ -8,8 +8,8 @@ use crate::web::api_docs::{
     get_openapi_yaml,
 };
 use crate::web::handlers::files::{download_file, download_thumb};
-use crate::web::handlers::playlists::{
-    create_playlist, delete_playlist, get_my_playlists, get_playlist_details, update_playlist,
+use crate::web::handlers::collections::{
+    create_collection, delete_collection, get_my_collections, get_collection_details, update_collection,
 };
 use crate::web::handlers::posts::{create_post, delete_post, get_post, search_posts, update_post};
 use crate::web::handlers::tags::{
@@ -26,8 +26,10 @@ use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
 
 pub async fn run_web_server<PR, PLR, TR, FR, UR, FS>(
+    search_repo: crate::storage::postgres::search::PostgresSearchRepository,
+    playback_repo: crate::storage::postgres::playback::PostgresPlaybackRepository,
     post_repo: PR,
-    playlist_repo: PLR,
+    collection_repo: PLR,
     tag_repo: TR,
     file_repo: FR,
     user_repo: UR,
@@ -38,14 +40,16 @@ pub async fn run_web_server<PR, PLR, TR, FR, UR, FS>(
 ) -> std::io::Result<()>
 where
     PR: PostRepository + Clone + Send + Sync + 'static,
-    PLR: PlaylistRepository + Clone + Send + Sync + 'static,
+    PLR: CollectionRepository + Clone + Send + Sync + 'static,
     TR: TagRepository + Clone + Send + Sync + 'static,
     FR: FileRepository + Clone + Send + Sync + 'static,
     UR: UserRepository + Clone + Send + Sync + 'static,
     FS: FileStorage + Clone + Send + Sync + 'static,
 {
-    let services = Services::new(post_repo, playlist_repo, tag_repo, file_repo, file_storage);
+    let services = Services::new(post_repo, collection_repo, tag_repo, file_repo, file_storage);
 
+    let search_data = Data::new(search_repo);
+    let playback_data = Data::new(playback_repo);
     let services_data = Data::new(services);
 
     let user_data = Data::new(user_repo);
@@ -64,8 +68,15 @@ where
             ))
             .app_data(services_data.clone())
             .app_data(user_data.clone())
+            .app_data(playback_data.clone())
+            .app_data(search_data.clone())
             .service(
                 web::scope("/api")
+                    .route("/playback/position", web::put().to(crate::web::handlers::playback::position))
+                    .service(web::resource("/playback")
+                        .route(web::get().to(crate::web::handlers::playback::get))
+                        .route(web::put().to(crate::web::handlers::playback::save))
+                        .route(web::delete().to(crate::web::handlers::playback::reset)))
                     .service(
                         web::scope("/auth")
                             .route("me", web::get().to(get_current_user::<UR>))
@@ -74,25 +85,25 @@ where
                             .route("logout", web::post().to(logout_user)),
                     )
                     .service(
-                        web::scope("/playlists")
-                            .route("", web::post().to(create_playlist::<PR, PLR, TR, FR, FS>))
+                        web::scope("/collections")
+                            .route("", web::post().to(create_collection::<PR, PLR, TR, FR, FS>))
                             .route(
                                 "/search",
-                                web::post().to(get_my_playlists::<PR, PLR, TR, FR, FS>),
+                                web::post().to(get_my_collections::<PR, PLR, TR, FR, FS>),
                             )
                             .service(
                                 web::scope("/{id}")
                                     .route(
                                         "",
-                                        web::get().to(get_playlist_details::<PR, PLR, TR, FR, FS>),
+                                        web::get().to(get_collection_details::<PR, PLR, TR, FR, FS>),
                                     )
                                     .route(
                                         "",
-                                        web::delete().to(delete_playlist::<PR, PLR, TR, FR, FS>),
+                                        web::delete().to(delete_collection::<PR, PLR, TR, FR, FS>),
                                     )
                                     .route(
                                         "",
-                                        web::patch().to(update_playlist::<PR, PLR, TR, FR, FS>),
+                                        web::patch().to(update_collection::<PR, PLR, TR, FR, FS>),
                                     ),
                             ),
                     )
@@ -112,6 +123,7 @@ where
                     )
                     .service(
                         web::scope("/tags")
+                            .route("/{id}/neighborhood", web::get().to(crate::web::handlers::tags::tag_neighborhood::<PR, PLR, TR, FR, FS>))
                             .route("", web::get().to(list_tags_keyset::<PR, PLR, TR, FR, FS>))
                             .route("/search", web::get().to(search_tags::<PR, PLR, TR, FR, FS>))
                             .route("", web::patch().to(update_tags::<PR, PLR, TR, FR, FS>))

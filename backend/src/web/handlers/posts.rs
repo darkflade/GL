@@ -1,6 +1,6 @@
 use crate::application::contracts::{Cursor, KeysetCursor, NewTag, PaginationMode, UpdatePost};
 use crate::application::ports::{
-    FileRepository, PlaylistRepository, PostRepository, TagRepository,
+    FileRepository, CollectionRepository, PostRepository, TagRepository,
 };
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
@@ -17,16 +17,26 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 pub async fn search_posts<PR, PLR, TR, FR, FS>(
+    search: web::Data<crate::storage::postgres::search::PostgresSearchRepository>,
     services: web::Data<Services<PR, PLR, TR, FR, FS>>,
     query: web::Json<SearchQueryParams>,
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
 {
+    let options = crate::storage::postgres::search::Options::parse(&query)?;
+    if options.advanced() {
+        let result = search.search(&options, &query, None).await?;
+        let mut posts = Vec::new();
+        for (id, _) in &result.rows {
+            posts.push(services.get_post.execute(*id).await.map_err(|err| map_repo_error(err, "Post not found", "posts.search"))?);
+        }
+        return Ok(HttpResponse::Ok().json(result.response(serde_json::json!({"posts": posts}))));
+    }
     let tag_query = query.tag_query.clone().unwrap_or_default();
     let cursor = query.cursor.clone().unwrap_or_default();
     let cursor_mode = cursor.mode.clone().unwrap_or_default();
@@ -86,7 +96,7 @@ pub async fn create_post<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -184,7 +194,7 @@ pub async fn get_post<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -209,7 +219,7 @@ pub async fn delete_post<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,
@@ -232,7 +242,7 @@ pub async fn update_post<PR, PLR, TR, FR, FS>(
 ) -> Result<HttpResponse, AppError>
 where
     PR: PostRepository + Clone,
-    PLR: PlaylistRepository + Clone,
+    PLR: CollectionRepository + Clone,
     TR: TagRepository + Clone,
     FR: FileRepository + Clone,
     FS: FileStorage + Clone,

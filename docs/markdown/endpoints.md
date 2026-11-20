@@ -45,22 +45,22 @@
 ### `GET /tags/{id}/related`
 - Получить связанные теги для конкретного тега
 
-## Playlists
+## Collections
 
-### `POST /playlists`
-- Создать плейлист
+### `POST /collections`
+- Создать коллекция
 
-### `POST /playlists/search`
-- Получить плейлисты пользователя
+### `POST /collections/search`
+- Получить коллекции пользователя
 
-### `GET /playlists/{id}`
-- Получить полный плейлист
+### `GET /collections/{id}`
+- Получить полный коллекция
 
-### `PATCH /playlists/{id}`
-- Обновить плейлист
+### `PATCH /collections/{id}`
+- Обновить коллекция
 
-### `DELETE /playlists/{id}`
-- Удалить плейлист
+### `DELETE /collections/{id}`
+- Удалить коллекция
 
 ## Files
 

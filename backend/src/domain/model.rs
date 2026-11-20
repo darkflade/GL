@@ -12,8 +12,8 @@ pub type FileID = Uuid;
 pub type PostID = Uuid;
 pub type NoteID = Uuid;
 pub type TagID = Uuid;
-pub type PlaylistID = Uuid;
-pub type PlaylistItemID = Uuid;
+pub type CollectionID = Uuid;
+pub type CollectionItemID = Uuid;
 pub type UserID = Uuid;
 pub type RelativePath = String;
 
@@ -191,31 +191,31 @@ pub struct StoredFile {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Playlist {
-    pub id: PlaylistID,
+pub struct Collection {
+    pub id: CollectionID,
     pub title: String,
     pub description: Option<String>,
     pub tags: Vec<Tag>,
     pub cover: Option<FileID>,
-    pub items: Vec<PlaylistItem>,
+    pub items: Vec<CollectionItem>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PlaylistItem {
-    pub id: PlaylistItemID,
+pub struct CollectionItem {
+    pub id: CollectionItemID,
     pub position: u32,
-    pub content: PlaylistContent,
+    pub content: CollectionContent,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub enum PlaylistContent {
+pub enum CollectionContent {
     Post(Post),
     Note(String),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PlaylistSummary {
-    pub id: PlaylistID,
+pub struct CollectionSummary {
+    pub id: CollectionID,
     pub title: String,
     pub description: String,
     pub cover: Option<FileID>,

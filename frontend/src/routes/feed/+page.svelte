@@ -16,7 +16,7 @@
     import Header from "$lib/shared/components/layout/Header.svelte";
     import EmptyList from "$lib/shared/components/layout/EmptyList.svelte";
     import { toSearchInput } from "$lib/utils/search";
-    import AddToPlaylistDialog from "$lib/features/playlists/components/AddToPlaylistDialog.svelte";
+    import AddToCollectionDialog from "$lib/features/collections/components/AddToCollectionDialog.svelte";
     import { readSelectedPostIds, writeSelectedPostIds } from "$lib/infrastructure/storage/selected-posts";
     import type { SearchPostsQuery, UUID } from "$lib/domain";
     import type { KeysetCursorDto } from "$lib/infrastructure/repositories/dto";
@@ -40,7 +40,7 @@
     let settingsOpen = $state(false);
     let selectionMode = $state(false);
     let selectedPostIds = $state<UUID[]>([]);
-    let playlistDialogOpen = $state(false);
+    let collectionDialogOpen = $state(false);
 
     let currentFilters = $state<SearchPostsQuery>({
         tag_query: {
@@ -92,25 +92,25 @@
         await setSelectedPostIds([]);
     }
 
-    function openPlaylistSelectionMode() {
+    function openCollectionSelectionMode() {
         selectionMode = true;
     }
 
-    function closePlaylistSelectionMode() {
+    function closeCollectionSelectionMode() {
         selectionMode = false;
     }
 
-    function openAddToPlaylistDialog() {
+    function openAddToCollectionDialog() {
         if (selectedPostIds.length === 0) return;
-        playlistDialogOpen = true;
+        collectionDialogOpen = true;
     }
 
-    function closeAddToPlaylistDialog() {
-        playlistDialogOpen = false;
+    function closeAddToCollectionDialog() {
+        collectionDialogOpen = false;
     }
 
-    function handlePlaylistApplied() {
-        playlistDialogOpen = false;
+    function handleCollectionApplied() {
+        collectionDialogOpen = false;
         selectionMode = false;
         void clearPostSelection();
     }
@@ -270,24 +270,25 @@
         <h1 class="text-xl font-bold tracking-tight">Glab Storage</h1>
         <div class="header-actions">
             <PostSearchControls
+                sort={currentFilters.sort}
                 value={textSearchValue}
                 paginationMode={paginationMode}
                 onQueryChange={handleSearchQuery}
             />
             {#if selectionMode}
                 <span class="selection-count">Selected: {selectedPostIds.length}</span>
-                <button class="settings-btn" type="button" onclick={openAddToPlaylistDialog} disabled={selectedPostIds.length === 0}>
-                    Add To Playlist
+                <button class="settings-btn" type="button" onclick={openAddToCollectionDialog} disabled={selectedPostIds.length === 0}>
+                    Add To Collection
                 </button>
                 <button class="settings-btn" type="button" onclick={() => void clearPostSelection()} disabled={selectedPostIds.length === 0}>
                     Clear
                 </button>
-                <button class="settings-btn" type="button" onclick={closePlaylistSelectionMode}>
+                <button class="settings-btn" type="button" onclick={closeCollectionSelectionMode}>
                     Exit Select
                 </button>
             {:else}
-                <button class="settings-btn" type="button" onclick={openPlaylistSelectionMode}>
-                    Select For Playlist
+                <button class="settings-btn" type="button" onclick={openCollectionSelectionMode}>
+                    Select For Collection
                 </button>
             {/if}
             <button class="settings-btn" type="button" onclick={() => (settingsOpen = true)}>Settings</button>
@@ -369,25 +370,46 @@
                                 />
                             </label>
                             <button class="select-card-btn" type="button" onclick={() => void togglePostSelection(post.id)}>
-                                <PostCard post={post} size={null} />
+                                <!-- <PostCard post={post} size={null} /> -->
+                                <PostCard post={post} size="full" />
                             </button>
                         {:else}
                             <a href="/post?id={post.id}">
-                                <PostCard post={post} size={null} />
+                                <!-- <PostCard post={post} size={null} /> -->
+                                <PostCard post={post} size="full" />
                             </a>
                         {/if}
                     </div>
                 {/each}
             </div>
         {/if}
+
+        <div class="pager">
+                {#if paginationMode === "offset"}
+                    <button class="pager-btn" type="button" onclick={() => changePage(currentPage - 1)} disabled={currentPage <= 0}>
+                        Prev
+                    </button>
+                    <span class="pager-label">Page {currentPage + 1}</span>
+                    <button class="pager-btn" type="button" onclick={() => changePage(currentPage + 1)} disabled={currentPage >= Math.max(0, totalPages - 1)}>
+                        Next
+                    </button>
+                {:else}
+                    <button class="pager-btn" type="button" onclick={loadPrevByKeyset} disabled={!hasPrev}>
+                        Back
+                    </button>
+                    <button class="pager-btn" type="button" onclick={loadNextByKeyset} disabled={!hasNext}>
+                        Next
+                    </button>
+                {/if}
+            </div>d
     </main>
 </div>
 
-<AddToPlaylistDialog
-    open={playlistDialogOpen}
+<AddToCollectionDialog
+    open={collectionDialogOpen}
     postIds={selectedPostIds}
-    onClose={closeAddToPlaylistDialog}
-    onDone={handlePlaylistApplied}
+    onClose={closeAddToCollectionDialog}
+    onDone={handleCollectionApplied}
 />
 
 <style>

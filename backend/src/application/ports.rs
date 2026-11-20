@@ -1,11 +1,11 @@
 use crate::application::contracts::{
-    Cursor, KeysetCursor, NewPlaylist, NewPost, NewTag, NewUser, PlaylistQuery,
-    SearchPlaylistsResponse, SearchPostsKeysetResponse, SearchPostsOffsetResponse,
+    Cursor, KeysetCursor, NewCollection, NewPost, NewTag, NewUser, CollectionQuery,
+    SearchCollectionsResponse, SearchPostsKeysetResponse, SearchPostsOffsetResponse,
     SearchTagRelationsResponse, SearchTagsResponse, TagBatchUpdate, TagQuery,
-    TagRelationsBatchUpdate, UpdatePlaylist, UpdatePost,
+    TagRelationsBatchUpdate, UpdateCollection, UpdatePost,
 };
 use crate::domain::model::{
-    File, FileID, FileMeta, FileStatus, FileType, Playlist, PlaylistID, Post, PostID, RepoError,
+    File, FileID, FileMeta, FileStatus, FileType, Collection, CollectionID, Post, PostID, RepoError,
     Tag, TagID, User, UserID,
 };
 use async_trait::async_trait;
@@ -35,35 +35,36 @@ pub trait PostRepository: Send + Sync {
 }
 
 #[async_trait]
-pub trait PlaylistRepository: Send + Sync {
+pub trait CollectionRepository: Send + Sync {
     async fn create(
         &self,
         user_id: UserID,
-        new_playlist: NewPlaylist,
-    ) -> Result<PlaylistID, RepoError>;
-    async fn get(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<Playlist, RepoError>;
+        new_collection: NewCollection,
+    ) -> Result<CollectionID, RepoError>;
+    async fn get(&self, user_id: UserID, collection_id: CollectionID) -> Result<Collection, RepoError>;
     async fn update(
         &self,
         user_id: UserID,
-        id: PlaylistID,
-        update_playlist: UpdatePlaylist,
+        id: CollectionID,
+        update_collection: UpdateCollection,
     ) -> Result<(), RepoError>;
-    async fn delete(&self, user_id: UserID, playlist_id: PlaylistID) -> Result<(), RepoError>;
+    async fn delete(&self, user_id: UserID, collection_id: CollectionID) -> Result<(), RepoError>;
     async fn search(
         &self,
         user_id: UserID,
-        query: PlaylistQuery,
+        query: CollectionQuery,
         cursor: KeysetCursor,
-    ) -> Result<SearchPlaylistsResponse, RepoError>;
+    ) -> Result<SearchCollectionsResponse, RepoError>;
     async fn get_all(
         &self,
         user_id: UserID,
         cursor: KeysetCursor,
-    ) -> Result<SearchPlaylistsResponse, RepoError>;
+    ) -> Result<SearchCollectionsResponse, RepoError>;
 }
 
 #[async_trait]
 pub trait TagRepository: Send + Sync {
+    async fn neighborhood(&self, id: TagID) -> Result<crate::application::contracts::TagNeighborhood, RepoError>;
     async fn get_or_create(&self, tag: Vec<NewTag>) -> Result<Vec<Tag>, RepoError>;
     async fn search(&self, query: &str, limit: i64) -> Result<Vec<Tag>, RepoError>;
     async fn list_keyset(&self, cursor: KeysetCursor) -> Result<SearchTagsResponse, RepoError>;
