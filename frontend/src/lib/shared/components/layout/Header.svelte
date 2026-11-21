@@ -12,6 +12,7 @@
         <Button href="/">Feed</Button>
         <Button href="/collections">Collections</Button>
         <Button href="/tags">Tags</Button>
+        <Button href="/admin">Admin</Button>
         <Button href="/post/create">Create Post</Button>
 
 

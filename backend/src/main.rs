@@ -69,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         server_ip_address,
         server_port,
         secret_key,
+        pool,
     )
     .await
     .context("failed to run web server")?;

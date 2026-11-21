@@ -52,6 +52,7 @@ services:
     env_file: .env
     volumes:
       - ${NEW_MEDIA_HOST_PATH}:/media/new
+      - ${OLD_MEDIA_HOST_PATH}:/media/old:ro
     depends_on:
       - postgres
       - redis

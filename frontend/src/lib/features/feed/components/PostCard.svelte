@@ -12,7 +12,7 @@
 
     let {post, size = null}: CardProps = $props()
 
-    const fullSize = size == "full"
+    const fullSize = $derived(size === "full");
 
     const mediaType = $derived(String(post.file.media_type ?? "").toLowerCase());
 
@@ -21,7 +21,7 @@
     const isAudio = $derived(mediaType === "audio");
 
     const fileUrl = $derived(
-        fullSize
+        fullSize || !isPicture
             ? `/api/files/full/${post.file.id}`
             : `/api/files/thumb/${post.file.id}?size=small`
     );

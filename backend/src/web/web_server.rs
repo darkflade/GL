@@ -7,6 +7,7 @@ use crate::web::api_docs::{
     get_docs_index_html, get_openapi_service_swagger_html, get_openapi_service_yaml,
     get_openapi_yaml,
 };
+use crate::web::handlers::admin_files;
 use crate::web::handlers::files::{download_file, download_thumb};
 use crate::web::handlers::collections::{
     create_collection, delete_collection, get_my_collections, get_collection_details, update_collection,
@@ -37,6 +38,7 @@ pub async fn run_web_server<PR, PLR, TR, FR, UR, FS>(
     ip_address: String,
     port: u16,
     secret_key: String,
+    pool: sqlx::PgPool,
 ) -> std::io::Result<()>
 where
     PR: PostRepository + Clone + Send + Sync + 'static,
@@ -53,6 +55,8 @@ where
     let services_data = Data::new(services);
 
     let user_data = Data::new(user_repo);
+    let admin_files_data = Data::new(admin_files::AdminFiles::default());
+    let pool_data = Data::new(pool);
 
     let apply_key = Key::derive_from(secret_key.as_bytes());
 
@@ -70,8 +74,17 @@ where
             .app_data(user_data.clone())
             .app_data(playback_data.clone())
             .app_data(search_data.clone())
+            .app_data(admin_files_data.clone())
+            .app_data(pool_data.clone())
             .service(
                 web::scope("/api")
+                    .service(web::scope("/admin/files")
+                        .route("/browse", web::get().to(admin_files::browse))
+                        .route("/import", web::get().to(admin_files::import_status))
+                        .route("/import", web::post().to(admin_files::start_import))
+                        .route("/scan", web::get().to(admin_files::scan_status))
+                        .route("/scan", web::post().to(admin_files::start_scan))
+                        .route("/{id}/path", web::patch().to(admin_files::repair)))
                     .route("/playback/position", web::put().to(crate::web::handlers::playback::position))
                     .service(web::resource("/playback")
                         .route(web::get().to(crate::web::handlers::playback::get))

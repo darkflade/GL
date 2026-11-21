@@ -1,13 +1,14 @@
 use crate::application::ports::{
-    FileRepository, CollectionRepository, PostRepository, TagRepository,
+    CollectionRepository, FileRepository, PostRepository, TagRepository,
 };
 use crate::application::use_cases::services::Services;
 use crate::domain::files::FileStorage;
-use crate::domain::model::FileStatus;
+use crate::domain::model::{FileStatus, FileType};
 use crate::web::error::AppError;
 use crate::web::handlers::utils::{map_repo_error, parse_uuid};
 use actix_web::web::Data;
 use actix_web::{HttpResponse, web};
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -102,14 +103,36 @@ where
 
     let accel_prefix = media_to_accel_prefix(path_str.as_ref())?;
     let (shard_a, shard_b) = uuid_shards(file_uuid);
-    let redirect_url = format!(
-        "{}/thumb/{}/{}/{}/{}.webp",
-        accel_prefix,
+    let thumb = format!(
+        "thumb/{}/{}/{}/{}.webp",
         query_params.size.as_dir(),
         shard_a,
         shard_b,
         file_uuid
     );
+    let current_root = if accel_prefix == "/protected_old" {
+        "/media/old"
+    } else {
+        "/media/new"
+    };
+    let (other_root, other_prefix) = if current_root == "/media/old" {
+        ("/media/new", "/protected_current")
+    } else {
+        ("/media/old", "/protected_old")
+    };
+    let redirect_url = web::block(move || {
+        if std::path::Path::new(current_root).join(&thumb).is_file() {
+            Ok(format!("{accel_prefix}/{thumb}"))
+        } else if std::path::Path::new(other_root).join(&thumb).is_file() {
+            Ok(format!("{other_prefix}/{thumb}"))
+        } else if matches!(file_path.media_type, FileType::Picture) {
+            map_media_path_to_accel_path(&file_path.path.to_string_lossy())
+        } else {
+            Err(AppError::not_found("Thumbnail not found"))
+        }
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("thumbnail lookup failed: {error}")))??;
 
     log::debug!("resolved x-accel redirect={redirect_url}");
 
@@ -118,11 +141,19 @@ where
         .finish())
 }
 fn map_media_path_to_accel_path(path: &str) -> Result<String, AppError> {
+    const ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'%').add(b'?').add(b'#');
+
     if let Some(rest) = path.strip_prefix("/media/new/") {
-        return Ok(format!("/protected_current/{rest}"));
+        return Ok(format!(
+            "/protected_current/{}",
+            utf8_percent_encode(rest, ESCAPE)
+        ));
     }
     if let Some(rest) = path.strip_prefix("/media/old/") {
-        return Ok(format!("/protected_old/{rest}"));
+        return Ok(format!(
+            "/protected_old/{}",
+            utf8_percent_encode(rest, ESCAPE)
+        ));
     }
 
     Err(AppError::internal(format!(

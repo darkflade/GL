@@ -594,3 +594,5 @@ CREATE TABLE public.collection_playback_positions (
     PRIMARY KEY (user_id, collection_id)
 );
 ALTER TABLE public.collection_playback_positions OWNER TO glab;
+CREATE INDEX IF NOT EXISTS idx_files_path ON public.files (path);
+CREATE INDEX IF NOT EXISTS idx_files_hash ON public.files (hash);
